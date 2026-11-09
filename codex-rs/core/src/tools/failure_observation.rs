@@ -45,13 +45,15 @@ fn completed_observation(item: &TurnItem) -> Option<(String, Option<FailureFinge
             let failure =
                 if tool != "other_command" && command.status == CommandExecutionStatus::Failed {
                     command.exit_code.and_then(|exit_code| {
-                        FailureFingerprint::new(
-                            tool,
-                            &command.command,
-                            &command.cwd.to_string(),
-                            exit_code,
-                            command.aggregated_output.as_deref().unwrap_or_default(),
-                        )
+                        command.aggregated_output.as_deref().and_then(|output| {
+                            FailureFingerprint::new(
+                                tool,
+                                &command.command,
+                                &command.cwd.to_string(),
+                                exit_code,
+                                output,
+                            )
+                        })
                     })
                 } else {
                     None
@@ -63,7 +65,18 @@ fn completed_observation(item: &TurnItem) -> Option<(String, Option<FailureFinge
         TurnItem::FileChange(_)
         | TurnItem::DynamicToolCall(_)
         | TurnItem::McpToolCall(_)
-        | TurnItem::CollabAgentToolCall(_) => (item.id(), None),
+        | TurnItem::CollabAgentToolCall(_)
+        | TurnItem::SubAgentActivity(_)
+        | TurnItem::FunctionCallOutput(_)
+        | TurnItem::HookPrompt(_)
+        | TurnItem::UserMessage(_)
+        | TurnItem::ImageView(_)
+        | TurnItem::WebSearch(_)
+        | TurnItem::ImageGeneration(_)
+        | TurnItem::Extension(_)
+        | TurnItem::ContextCompaction(_)
+        | TurnItem::EnteredReviewMode(_)
+        | TurnItem::ExitedReviewMode(_) => (item.id(), None),
         _ => return None,
     })
 }
@@ -105,6 +118,71 @@ mod tests {
                 completed_observation(&command(status, code, ExecCommandSource::Agent))
                     .expect("command observed");
             assert_eq!(failure.is_some(), expected);
+        }
+    }
+
+    #[test]
+    fn missing_output_is_unknown_but_observed_empty_output_is_a_failure() {
+        let mut item = command(
+            CommandExecutionStatus::Failed,
+            Some(1),
+            ExecCommandSource::Agent,
+        );
+        let TurnItem::CommandExecution(command) = &mut item else {
+            unreachable!("command fixture");
+        };
+        command.aggregated_output = None;
+        assert!(
+            completed_observation(&item)
+                .expect("command observed")
+                .1
+                .is_none()
+        );
+        let TurnItem::CommandExecution(command) = &mut item else {
+            unreachable!("command fixture");
+        };
+        command.aggregated_output = Some(String::new());
+        assert!(
+            completed_observation(&item)
+                .expect("command observed")
+                .1
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn tool_evidence_and_compaction_break_command_failure_streaks() {
+        use codex_protocol::items::ContextCompactionItem;
+        use codex_protocol::items::ImageViewItem;
+
+        let image: ImageViewItem = serde_json::from_value(json!({
+            "id": "view", "path": "file:///project/failure.png"
+        }))
+        .expect("image fixture");
+        for boundary in [
+            TurnItem::ImageView(image),
+            TurnItem::ContextCompaction(ContextCompactionItem {
+                id: "compact".into(),
+            }),
+        ] {
+            let mut observer = FailureObserver::default();
+            let observe_failure = |observer: &mut FailureObserver, id: &str| {
+                observer.observe(
+                    id,
+                    FailureFingerprint::new(
+                        "shell",
+                        &["false".into()],
+                        "file:///project",
+                        1,
+                        "unchanged failure",
+                    ),
+                )
+            };
+            assert_eq!(observe_failure(&mut observer, "1"), None);
+            assert_eq!(observe_failure(&mut observer, "2"), None);
+            let (id, failure) = completed_observation(&boundary).expect("progress boundary");
+            assert_eq!(observer.observe(&id, failure), None);
+            assert_eq!(observe_failure(&mut observer, "3"), None);
         }
     }
 

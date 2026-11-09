@@ -109,11 +109,13 @@ fn normalize(text: &str, collapse_whitespace: bool) -> String {
         let bare = token
             .trim_matches(|ch: char| matches!(ch, '\'' | '"' | '(' | ')' | '[' | ']' | ',' | ';'));
         let temporary_path = normalized_temporary_path(bare);
+        // UUIDs/timestamps in argv can be meaningful resource selectors. Their
+        // arbitrary values are normalized only in diagnostic error metadata.
         let replacement = if let Some(path) = temporary_path.as_deref() {
             Some(path)
-        } else if is_uuid(bare) {
+        } else if collapse_whitespace && is_uuid(bare) {
             Some("<random-id>")
-        } else if is_timestamp(bare) {
+        } else if collapse_whitespace && is_timestamp(bare) {
             Some("<timestamp>")
         } else {
             None
@@ -357,6 +359,32 @@ mod tests {
         let split =
             FailureFingerprint::new("shell", &["a".into(), "b".into()], "/project", 1, "failed");
         assert!(split != failure("a b", "failed"));
+    }
+
+    #[test]
+    fn changed_command_identifiers_and_dates_are_not_volatile_error_metadata() {
+        // Resource IDs and dates in argv select different inputs. Only error
+        // metadata may discard arbitrary UUID/timestamp tokens.
+        for commands in [
+            [
+                "fetch 550e8400-e29b-41d4-a716-446655440000",
+                "fetch 550e8400-e29b-41d4-a716-446655440001",
+                "fetch 550e8400-e29b-41d4-a716-446655440002",
+            ],
+            [
+                "query 2026-11-09T12:34:56Z",
+                "query 2026-11-09T12:35:57Z",
+                "query 2026-11-09T12:36:58Z",
+            ],
+        ] {
+            let mut observer = FailureObserver::default();
+            for (index, command) in commands.into_iter().enumerate() {
+                assert_eq!(
+                    observer.observe(&index.to_string(), failure(command, "unchanged error")),
+                    None
+                );
+            }
+        }
     }
 
     #[test]
