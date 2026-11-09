@@ -86,3 +86,59 @@ codex -a never exec --ignore-user-config --ignore-rules --ephemeral \
 This establishes current authentication, superseding the earlier HTTP 401
 observation. It does not validate the integrated fork's live handoff behavior.
 No model-quality, cost or token-saving claim follows from these checks.
+
+## Live baseline with the production packet codec
+
+Two real `gpt-6.1-sol` sessions also pass a stock-CLI baseline on this host.
+The first runs in native read-only mode and reproduces two Python unittest
+failures caused by `return a + b + 1`. Its typed notes preserve failed and
+unverified evidence. A small temporary Rust driver imports the production
+`handoff.rs` directly, saves the packet, removes the original notes input, and
+renders the production continuation prompt. The second independent stock-CLI
+session runs in workspace-write mode, rechecks the failures, changes the function
+to `return a + b`, and reruns both tests successfully. Approvals are `never`.
+
+Independent assertions pass, and the test source, `add(a, b)` signature, sentinel
+and original packet remain unchanged. The session IDs differ. The observed
+session durations are 20.58 and 15.99 seconds; these are not benchmark results.
+The stock CLI binary SHA-256 is
+`a45099154d7fb4a5ed8a56f40966a95deb938e508bab23e6985035c709e9a85a`.
+
+Local evidence: `/private/tmp/harness-live-baseline-h_b3dnm5/report.json` in a
+mode-0700 directory; the report is mode 0600. It includes exact commands, native
+tool outputs, usage and thread IDs. The temporary driver is
+`/private/tmp/handoff-codec-review/src/main.rs`, and the orchestration script is
+`/private/tmp/harness_live_baseline.py`.
+
+This is a live baseline using stock CLI plus the production packet codec. It
+does not exercise the fork's new `handoff` command adapter, primary replanning,
+role validation or read-only write-denial behavior. Those gates remain separate.
+
+## Live fork command gate
+
+With a built fork CLI and an existing native OpenAI login, run:
+
+```sh
+python3 scripts/harness_handoff_live.py \
+  --codex /absolute/path/to/built/codex --model gpt-6.1-sol \
+  --workspace "$PWD" --report /tmp/harness-live-evidence.json --timeout 180
+```
+
+The workspace parent must be outside native temporary-directory and Codex-home
+write exceptions so the denied-write test is meaningful. An explicit model is
+required because the runner ignores user configuration and rules. It reuses
+native authentication without reading or copying credential files itself.
+The runner retains a fresh fixture and private evidence directory for review.
+
+Three real sessions must diagnose actual failures, repair from the actual
+`handoff save`/`inspect`/`continue` packet, and demonstrate a native read-only
+write denial. It requires distinct thread IDs, exact executed test commands,
+failed and unverified notes, immutable tests/API/sentinel/packet, independent
+post-repair assertions, and an observable shell-start marker before denial.
+Timeouts, malformed evidence or a generic tool-startup failure do not pass.
+
+The supplied stock CLI was rejected before fixture creation or model sessions;
+local report: `/private/tmp/harness-fork-live-attempt.json`. The helper's syntax,
+formatting, refusal path and command-evidence guard pass. Full execution against
+the built fork remains unverified until that binary is available in an
+authenticated native environment. The Linux offline CI job receives no login.
