@@ -32,7 +32,7 @@ enum HandoffAction {
         #[arg(long)]
         allow_repository_change: bool,
         #[command(flatten)]
-        exec: ExecCli,
+        exec: Box<ExecCli>,
     },
 }
 
@@ -149,7 +149,7 @@ pub(crate) fn prepare(cli: HandoffCli, root: &SharedCliOptions) -> anyhow::Resul
                 &payload,
                 exec.prompt.as_deref(),
             )?);
-            Ok(Some(exec))
+            Ok(Some(*exec))
         }
     }
 }
