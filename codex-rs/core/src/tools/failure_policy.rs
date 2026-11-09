@@ -51,6 +51,14 @@ struct Observation {
     failure: Option<FailureFingerprint>,
 }
 
+/// Safe recent evidence. Contains no model-provided command or error text.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct RepeatedFailure {
+    pub(super) matching_failures: usize,
+    pub(super) tool: &'static str,
+    pub(super) exit_code: i32,
+}
+
 #[derive(Default)]
 pub(super) struct FailureObserver {
     history: VecDeque<Observation>,
@@ -63,7 +71,7 @@ impl FailureObserver {
         &mut self,
         call_id: &str,
         failure: Option<FailureFingerprint>,
-    ) -> Option<usize> {
+    ) -> Option<RepeatedFailure> {
         if self.history.iter().any(|event| event.call_id == call_id) {
             return None;
         }
@@ -75,6 +83,13 @@ impl FailureObserver {
                 .take_while(|event| event.failure.as_ref() == Some(fingerprint))
                 .count()
         });
+        let diagnostic = failure.as_ref().and_then(|failure| {
+            (matching == THRESHOLD).then_some(RepeatedFailure {
+                matching_failures: matching,
+                tool: failure.tool,
+                exit_code: failure.exit_code,
+            })
+        });
         if self.history.len() == WINDOW {
             self.history.pop_front();
         }
@@ -83,7 +98,7 @@ impl FailureObserver {
             failure,
         });
         // One diagnostic per streak, rather than one per subsequent failure.
-        (matching == THRESHOLD).then_some(matching)
+        diagnostic
     }
 }
 
@@ -194,7 +209,9 @@ mod tests {
         let mut observer = FailureObserver::default();
         for index in 1..=10 {
             assert_eq!(
-                observer.observe(&index.to_string(), failure("cargo test", "test a failed")),
+                observer
+                    .observe(&index.to_string(), failure("cargo test", "test a failed"))
+                    .map(|diagnostic| diagnostic.matching_failures),
                 (index == 3).then_some(3),
             );
         }

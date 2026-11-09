@@ -18,13 +18,15 @@ pub(crate) fn observe_completed(turn: &TurnContext, item: &TurnItem) {
         // Diagnostics must never fail a tool call, even after poisoned state.
         return;
     };
-    if let Some(matching_failures) = observer.observe(&call_id, failure) {
+    if let Some(diagnostic) = observer.observe(&call_id, failure) {
         tracing::debug!(
             target: "codex_core::harness",
             event = "harness.repeated_failure",
             reason = "consecutive_matching_command_failures",
             mode = "observe_only",
-            matching_failures,
+            matching_failures = diagnostic.matching_failures,
+            tool_family = diagnostic.tool,
+            exit_code = diagnostic.exit_code,
             window_capacity = 20,
             "Repeated failed command observed"
         );
