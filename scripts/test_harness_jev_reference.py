@@ -107,6 +107,30 @@ class ReferenceRunnerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.validate_fixture(data)
 
+    def test_local_git_replace_cannot_change_the_pinned_source(self):
+        import subprocess
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory)
+            def git(*arguments):
+                return subprocess.check_output(
+                    ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                     "-c", "commit.gpgsign=false", "-C", directory, *arguments], text=True,
+                ).strip()
+            git("init", "--quiet")
+            path = reference / "jev_gate.py"
+            path.write_text("original source\n")
+            git("add", "jev_gate.py")
+            git("commit", "-qm", "original")
+            original = git("rev-parse", "HEAD")
+            path.write_text("replacement source\n")
+            git("commit", "-qam", "replacement")
+            replacement = git("rev-parse", "HEAD")
+            git("replace", original, replacement)
+            self.assertEqual(git("show", f"{original}:jev_gate.py"), "replacement source")
+            with patch.object(runner, "REVISION", original):
+                self.assertEqual(runner.committed_file(reference, "jev_gate.py"), "original source\n")
+
     def test_worker_refuses_the_current_network_namespace(self):
         import os
         with tempfile.TemporaryDirectory() as directory:

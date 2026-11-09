@@ -64,7 +64,7 @@ def validate_fixture(fixture: dict) -> None:
 def committed_file(reference: Path, path: str) -> str:
     # Fixed Git subcommand/path, no shell and no execution of case.command.
     result = subprocess.run(
-        ["git", "--no-optional-locks", "-C", str(reference), "show", f"{REVISION}:{path}"],
+        ["git", "--no-replace-objects", "--no-optional-locks", "-C", str(reference), "show", f"{REVISION}:{path}"],
         capture_output=True, timeout=30, check=True,
         env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/nonexistent", "GIT_CONFIG_NOSYSTEM": "1"},
     )
