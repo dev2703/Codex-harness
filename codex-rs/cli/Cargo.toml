@@ -92,6 +92,7 @@ owo-colors = { workspace = true }
 regex-lite = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 sqlx = { workspace = true }
 supports-color = { workspace = true }
 sys-locale = { workspace = true }
@@ -138,7 +139,6 @@ insta = { workspace = true }
 jsonwebtoken = { workspace = true }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
-sha2 = { workspace = true }
 tar = { workspace = true }
 tokio-tungstenite = { workspace = true }
 vt100 = { workspace = true }
