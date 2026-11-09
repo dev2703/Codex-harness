@@ -554,3 +554,53 @@ fn exec_command_tool_output_preserves_omission_metadata_when_truncated() {
     assert!(text.contains("Warning: truncated output (original token count: 42000)"));
     assert_eq!(text.matches(&marker).count(), 1);
 }
+
+#[test]
+fn exec_command_code_mode_result_preserves_collection_omission_evidence() {
+    let payload = ToolPayload::Function {
+        arguments: "{}".to_string(),
+    };
+    let marker = format_output_omission_marker(/*omitted_bytes*/ 123_456);
+    let mut output = ExecCommandToolOutput {
+        event_call_id: "call-code-mode-omitted".to_string(),
+        chunk_id: "abc123".to_string(),
+        wall_time: std::time::Duration::from_millis(/*millis*/ 1250),
+        // Collection can report omitted bytes independently of the retained text.
+        raw_output: CapturedStream {
+            text: "remaining output".to_string(),
+            omitted_bytes: 123_456,
+        },
+        truncation_policy: TruncationPolicy::Tokens(10_000),
+        max_output_tokens: None,
+        process_id: None,
+        exit_code: Some(17),
+        original_token_count: Some(42_000),
+        hook_command: None,
+        tool_cwd: None,
+    };
+
+    // Omissions must remain visible even when the caller requests no additional
+    // model-facing truncation. The explicit-limit path must agree.
+    for max_output_tokens in [None, Some(1000)] {
+        output.max_output_tokens = max_output_tokens;
+        let result = output.code_mode_result(&payload);
+        let text = result["output"].as_str().expect("code-mode output text");
+        assert_eq!(text, format!("{marker}\nremaining output"));
+        assert_eq!(text.matches(&marker).count(), 1);
+        assert_eq!(result["exit_code"], 17);
+        assert_eq!(result["original_token_count"], 42_000);
+        assert_eq!(result["chunk_id"], "abc123");
+    }
+
+    // A collector that already rendered the notice must not duplicate it.
+    output.max_output_tokens = None;
+    output.raw_output.text = format!("{marker}\nremaining output");
+    let result = output.code_mode_result(&payload);
+    let text = result["output"].as_str().expect("code-mode output text");
+    assert_eq!(text.matches(&marker).count(), 1);
+
+    // Complete output must remain byte-for-byte unchanged.
+    output.raw_output.omitted_bytes = 0;
+    output.raw_output.text = "complete output".to_string();
+    assert_eq!(output.code_mode_result(&payload)["output"], "complete output");
+}
