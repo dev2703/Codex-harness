@@ -59,6 +59,7 @@ mod daemon_telemetry;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod desktop_app;
 mod doctor;
+mod handoff_cmd;
 #[cfg(test)]
 #[path = "exec_args_tests.rs"]
 mod exec_args_tests;
@@ -152,6 +153,9 @@ enum Subcommand {
     /// Run Codex non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
+
+    /// Save, inspect or continue an explicit durable context handoff.
+    Handoff(handoff_cmd::HandoffCli),
 
     /// Run a code review non-interactively.
     Review(ReviewCommand),
@@ -1170,6 +1174,18 @@ async fn dispatch_cli(
             // Keep the exec future out of the shared dispatcher's stack frame.
             Box::pin(codex_exec::run_main(exec_cli, arg0_paths.clone())).await?;
         }
+        Some(Subcommand::Handoff(command)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "handoff",
+            )?;
+            if let Some(mut exec_cli) = handoff_cmd::prepare(command, &interactive.shared)? {
+                exec_cli.strict_config |= root_strict_config;
+                prepend_config_flags(&mut exec_cli.config_overrides, root_config_overrides.clone());
+                Box::pin(codex_exec::run_main(exec_cli, arg0_paths.clone())).await?;
+            }
+        }
         Some(Subcommand::Review(ReviewCommand {
             strict_config,
             trust,
@@ -1970,6 +1986,7 @@ fn profile_v2_for_subcommand<'a>(
     };
 
     match subcommand {
+        Subcommand::Handoff(command) if command.is_continue() => Ok(Some(profile_v2)),
         Subcommand::Agents(_)
         | Subcommand::Exec(_)
         | Subcommand::Review(_)
@@ -2290,6 +2307,7 @@ fn reject_unsupported_worktree_for_subcommand(
 ) -> anyhow::Result<()> {
     let subcommand_worktree = match subcommand {
         Some(Subcommand::Exec(command)) => command.shared.worktree,
+        Some(Subcommand::Handoff(command)) => command.worktree_requested(),
         Some(Subcommand::Resume(command)) => command.config_overrides.0.shared.worktree,
         Some(Subcommand::Fork(command)) => command.config_overrides.0.shared.worktree,
         Some(Subcommand::Archive(command)) | Some(Subcommand::Unarchive(command)) => {
@@ -2306,6 +2324,7 @@ fn reject_unsupported_worktree_for_subcommand(
 
     match subcommand {
         None => Ok(()),
+        Some(Subcommand::Handoff(command)) if command.is_continue() => Ok(()),
         Some(Subcommand::Fork(command)) if command.session_id.is_some() && !command.last => Ok(()),
         Some(Subcommand::Fork(_)) => {
             anyhow::bail!("`codex fork --worktree` requires an explicit session ID")
@@ -2376,6 +2395,8 @@ fn unsupported_subcommand_name_for_strict_config(
             Some(app_server_subcommand_name(app_server.subcommand.as_ref()))
         }
         Some(Subcommand::RemoteControl(remote_control)) => Some(remote_control.subcommand_name()),
+        Some(Subcommand::Handoff(command)) if command.is_continue() => None,
+        Some(Subcommand::Handoff(_)) => Some("handoff"),
         Some(Subcommand::Mcp(_)) => Some("mcp"),
         Some(Subcommand::Plugin(_)) => Some("plugin"),
         Some(Subcommand::MigrateRollouts(_)) => Some("migrate-rollouts"),
