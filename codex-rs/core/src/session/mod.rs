@@ -3088,6 +3088,7 @@ impl Session {
         user_input_extension_data: Option<&BTreeMap<String, Value>>,
     ) {
         record_turn_ttfm_metric(turn_context, &item).await;
+        crate::tools::failure_observation::observe_completed(turn_context, &item);
         for contributor in self.services.extensions.turn_lifecycle_contributors() {
             contributor
                 .on_item_completed_with_metadata(
