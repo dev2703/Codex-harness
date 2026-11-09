@@ -38,8 +38,11 @@ nonzero. There is no unisolated fallback.
 
 The native continuation checks use a local mock Responses server inside the
 isolated namespace. They verify process wiring, fresh sessions and user-context
-placement. They do not verify a real model's diagnosis, repair quality, approval
-behavior or read-only tool enforcement. The live scenarios in
+placement. A fixed tool response also asks the native CLI to attempt a harmless
+fixture write under read-only policy with approvals set to `never`; the test
+requires observable shell startup, a permission denial and an absent output file.
+These cases do not verify a real model's diagnosis, repair quality or behavior.
+The live scenarios in
 [the original acceptance gate](harness-handoff-acceptance.md) remain required.
 JSON evidence includes source revision, CLI version/hash, commands and outcomes.
 CI retains the reports and build logs as artifacts, including on failures.

@@ -98,6 +98,11 @@ def committed_file(reference: Path, path: str) -> str:
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": "/nonexistent",
             "GIT_CONFIG_NOSYSTEM": "1",
+            # A partial clone may otherwise fetch a missing pinned object here,
+            # before Bubblewrap starts. Older Git releases ignore NO_LAZY_FETCH;
+            # deny every transport too, including local executable upload-pack.
+            "GIT_NO_LAZY_FETCH": "1",
+            "GIT_ALLOW_PROTOCOL": "",
         },
     )
     if len(result.stdout) > MAX_SOURCE:

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Exercise a built native CLI in a mandatory, offline Bubblewrap sandbox.
 
-The loopback Responses fixture checks process wiring and user-context transport.
+The loopback Responses fixture checks process wiring, user-context transport,
+and one fixed native shell write denial under the read-only sandbox.
 It is deterministic test data, not a model or evidence of live-model behavior.
 Fetch dependencies and the pinned Jev objects before invoking this runner.
 """
@@ -17,6 +18,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import socket
@@ -28,6 +30,9 @@ import threading
 import time
 
 MAX_OUTPUT = 128 * 1024
+READONLY_CALL_ID = "harness-readonly-write"
+READONLY_MARKER = "HARNESS_READONLY_SHELL_STARTED"
+READONLY_DESTINATION = Path("/fixture/native-readonly-must-not-exist")
 
 
 def require(condition: bool, message: str) -> None:
@@ -228,12 +233,64 @@ class Processes:
         )
 
 
-class ResponsesFixture:
-    """A fixed, no-tool Responses stream reachable only inside the sandbox."""
+def advertised_exec_namespace(tools: list, namespace=None):
+    for tool in tools:
+        if tool.get("type") == "function" and tool.get("name") == "exec_command":
+            return True, namespace
+        if tool.get("type") == "namespace":
+            found, child_namespace = advertised_exec_namespace(
+                tool.get("tools", []), tool.get("name")
+            )
+            if found:
+                return found, child_namespace
+    return False, None
 
-    def __init__(self):
+
+def readonly_tool_result(request: dict) -> dict:
+    outputs = [
+        item
+        for item in request.get("input", [])
+        if item.get("type") == "function_call_output"
+        and item.get("call_id") == READONLY_CALL_ID
+    ]
+    require(len(outputs) == 1, "native read-only shell returned no unique tool result")
+    output = outputs[0].get("output")
+    require(isinstance(output, str), "native read-only shell output must contain text")
+    require(
+        re.search(rf"(?m)^{re.escape(READONLY_MARKER)}\r?$", output) is not None,
+        "native shell did not start; infrastructure failures do not prove sandbox denial",
+    )
+    exited = re.search(r"Process exited with code (-?\d+)", output)
+    require(
+        exited is not None and int(exited.group(1)) != 0,
+        "native read-only write must terminate with a nonzero command exit",
+    )
+    require(
+        any(
+            reason in output.lower()
+            for reason in (
+                "permission denied",
+                "operation not permitted",
+                "read-only file system",
+            )
+        ),
+        "native shell returned no filesystem permission denial",
+    )
+    return {
+        "call_id": READONLY_CALL_ID,
+        "shell_started": True,
+        "exit_code": int(exited.group(1)),
+        "output": output,
+    }
+
+
+class ResponsesFixture:
+    """Fixed Responses streams reachable only inside the sandbox."""
+
+    def __init__(self, *, readonly_probe=False):
         self.requests = []
         self.errors = []
+        self.readonly_probe = readonly_probe
         owner = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -285,6 +342,35 @@ class ResponsesFixture:
                             },
                         },
                     ]
+                    if owner.readonly_probe and number == 1:
+                        found, namespace = advertised_exec_namespace(
+                            owner.requests[0].get("tools", [])
+                        )
+                        require(
+                            found,
+                            "native CLI did not advertise exec_command; sandbox probe cannot run",
+                        )
+                        item = {
+                            "type": "function_call",
+                            "name": "exec_command",
+                            "call_id": READONLY_CALL_ID,
+                            "arguments": json.dumps(
+                                {
+                                    "cmd": f"printf '{READONLY_MARKER}\\n'; printf forbidden > {READONLY_DESTINATION}",
+                                    "shell": "/bin/sh",
+                                    "login": False,
+                                    "yield_time_ms": 1000,
+                                }
+                            ),
+                        }
+                        if namespace:
+                            item["namespace"] = namespace
+                        events[1] = {"type": "response.output_item.done", "item": item}
+                    if owner.readonly_probe:
+                        require(
+                            number <= 2,
+                            "unexpected additional request in fixed read-only probe",
+                        )
                     body = "".join(
                         f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
                         for event in events
@@ -717,6 +803,63 @@ def acceptance(payload: dict, processes: Processes, report: dict) -> None:
         "fresh_continue_user_context_distinct_sessions_repository_mismatch_and_acknowledgement"
     )
 
+    require(
+        not READONLY_DESTINATION.exists(),
+        "native sandbox probe destination already exists",
+    )
+    with ResponsesFixture(readonly_probe=True) as server:
+        probe = processes.codex(
+            *server.config(),
+            "-c",
+            'approval_policy="never"',
+            "-c",
+            "features.code_mode=false",
+            "-c",
+            "features.unified_exec=true",
+            "-c",
+            "features.shell_snapshot_v2=false",
+            "handoff",
+            "continue",
+            "packet.json",
+            "--allow-repository-change",
+            *common,
+            "Exercise the fixed read-only shell fixture",
+            accepted=None,
+            timeout=90,
+        )
+        require(
+            not server.errors,
+            f"native sandbox fixture protocol failed: {server.errors}",
+        )
+        require(
+            probe.returncode == 0 and len(server.requests) == 2,
+            "native sandbox probe did not complete its two-request tool cycle",
+        )
+        result = readonly_tool_result(server.requests[1])
+        require(
+            not READONLY_DESTINATION.exists(),
+            "native read-only tool created the forbidden fixture file",
+        )
+        require(
+            packet_path.read_bytes() == original,
+            "native sandbox probe changed the handoff packet",
+        )
+        report["native_readonly_tool"] = {
+            **result,
+            "thread_id": thread_id(probe.stdout),
+            "destination_absent": True,
+            "sandbox": "read-only",
+            "approval_policy": "never",
+            "mock_responses": True,
+            "real_model_calls": 0,
+        }
+        report["native_tool_sandbox_behavior"] = (
+            "passed fixed native shell write-denial process case; live-model behavior unverified"
+        )
+    report["cases"].append(
+        "native_readonly_shell_started_denied_write_and_destination_absent"
+    )
+
     jev = load_reference_runner()
     reference_result = jev.evaluate(payload["jev"])
     require(
@@ -744,7 +887,7 @@ def worker(path: Path) -> int:
         "binary_sha256": payload["binary_sha256"],
         "cases": [],
         "live_model_behavior": "unverified; offline Responses fixture only",
-        "native_tool_sandbox_behavior": "unverified; no model tool calls in offline transport cases",
+        "native_tool_sandbox_behavior": "unverified; native read-only shell probe has not passed",
         "usage_metrics": "fixture zeros do not represent model usage",
     }
     started = time.monotonic()

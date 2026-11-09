@@ -177,6 +177,93 @@ class ReferenceRunnerTests(unittest.TestCase):
                     runner.committed_file(reference, "jev_gate.py"), "original source\n"
                 )
 
+    def test_missing_promisor_blob_cannot_launch_upload_pack(self):
+        import os
+        import subprocess
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = root / "reference"
+            reference.mkdir()
+            env = {
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "HOME": directory,
+                "GIT_CONFIG_NOSYSTEM": "1",
+            }
+
+            def git(*arguments):
+                return subprocess.check_output(
+                    [
+                        "git",
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=fixture@example.invalid",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-C",
+                        str(reference),
+                        *arguments,
+                    ],
+                    text=True,
+                    env=env,
+                ).strip()
+
+            git("init", "--quiet")
+            (reference / "jev_gate.py").write_text("original source\n")
+            git("add", "jev_gate.py")
+            git("commit", "-qm", "original")
+            revision = git("rev-parse", "HEAD")
+            blob = git("rev-parse", "HEAD:jev_gate.py")
+            marker = root / "fetch-attempted"
+            upload_pack = root / "upload-pack"
+            upload_pack.write_text(
+                "#!/usr/bin/env python3\n"
+                "from pathlib import Path\n"
+                f"Path({str(marker)!r}).write_text('attempted')\n"
+                "raise SystemExit(1)\n"
+            )
+            upload_pack.chmod(0o700)
+            git("config", "extensions.partialClone", "origin")
+            git("config", "remote.origin.promisor", "true")
+            git("config", "remote.origin.partialclonefilter", "blob:none")
+            git("config", "remote.origin.url", str(reference))
+            git("config", "remote.origin.uploadpack", str(upload_pack))
+            git("config", "protocol.file.allow", "always")
+            (reference / ".git/objects" / blob[:2] / blob[2:]).unlink()
+
+            # Positive control: the incomplete local repository really would
+            # launch its configured uploader, even for this fixed git show.
+            control = subprocess.run(
+                ["git", "-C", str(reference), "show", f"{revision}:jev_gate.py"],
+                capture_output=True,
+                env=env,
+                timeout=30,
+            )
+            self.assertNotEqual(control.returncode, 0)
+            self.assertTrue(marker.exists(), control.stderr.decode())
+            marker.unlink()
+            with patch.object(runner, "REVISION", revision):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    runner.committed_file(reference, "jev_gate.py")
+            self.assertFalse(marker.exists())
+
+            # Git 2.43 ignores NO_LAZY_FETCH. Removing it reproduces that
+            # behavior while still testing the real transport-level fallback.
+            real_run = subprocess.run
+
+            def older_git(*arguments, **kwargs):
+                kwargs["env"] = dict(kwargs["env"])
+                kwargs["env"].pop("GIT_NO_LAZY_FETCH", None)
+                return real_run(*arguments, **kwargs)
+
+            with patch.object(runner, "REVISION", revision):
+                with patch.object(runner.subprocess, "run", older_git):
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        runner.committed_file(reference, "jev_gate.py")
+            self.assertFalse(marker.exists())
+
     def test_worker_refuses_the_current_network_namespace(self):
         import os
 

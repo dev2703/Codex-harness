@@ -19,6 +19,53 @@ SPEC.loader.exec_module(runner)
 
 
 class AcceptanceGuards(unittest.TestCase):
+    def test_readonly_probe_requires_the_real_exec_tool_to_be_advertised(self):
+        direct = {"type": "function", "name": "exec_command", "parameters": {}}
+        self.assertEqual(runner.advertised_exec_namespace([direct]), (True, None))
+        self.assertEqual(
+            runner.advertised_exec_namespace(
+                [{"type": "namespace", "name": "functions", "tools": [direct]}]
+            ),
+            (True, "functions"),
+        )
+        self.assertEqual(
+            runner.advertised_exec_namespace(
+                [{"type": "function", "name": "made_up_shell"}]
+            ),
+            (False, None),
+        )
+
+    def test_readonly_denial_requires_shell_output_and_actual_nonzero_exit(self):
+        def request(output):
+            return {
+                "input": [
+                    {
+                        "type": "function_call_output",
+                        "call_id": runner.READONLY_CALL_ID,
+                        "output": output,
+                    }
+                ]
+            }
+
+        output = (
+            f"Process exited with code 2\nFinal output:\n{runner.READONLY_MARKER}\n"
+            "/bin/sh: cannot create /fixture/native-readonly-must-not-exist: Permission denied\n"
+        )
+        result = runner.readonly_tool_result(request(output))
+        self.assertTrue(result["shell_started"])
+        self.assertEqual(result["exit_code"], 2)
+        failures = [
+            "Sandbox infrastructure failed: Operation not permitted",
+            f"Process exited with code -1\ncommand: printf '{runner.READONLY_MARKER}'\nPermission denied",
+            output.replace("code 2", "code 0"),
+            output.replace("Permission denied", "unexpected error"),
+        ]
+        for failure in failures:
+            with self.subTest(failure=failure), self.assertRaises(RuntimeError):
+                runner.readonly_tool_result(request(failure))
+        with self.assertRaises(RuntimeError):
+            runner.readonly_tool_result({"input": []})
+
     def test_sandbox_has_no_host_root_home_network_or_credentials(self):
         command = runner.sandbox_command(
             "bwrap", Path("/native/codex"), Path("/input"), Path("/fixture-data")
