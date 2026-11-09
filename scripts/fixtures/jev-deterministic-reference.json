@@ -1,0 +1,81 @@
+{
+  "reference_repository": "eugeniughelbur/jev-engineering",
+  "reference_commit": "412adce16f9326de70b9bae469328c21e26ca498",
+  "purpose": "Classify strings only; never execute case.command. Expected values describe the pinned Jev reference, not native Codex approval policy.",
+  "execution_status": "not_run_environment_offline",
+  "requirements": {
+    "network": false,
+    "model_calls": 0,
+    "isolated_home": true,
+    "pinned_default_policy": true
+  },
+  "cases": [
+    {
+      "id": "read_only_status",
+      "function": "fast_path",
+      "command": "git status",
+      "expected": "allow"
+    },
+    {
+      "id": "read_only_listing",
+      "function": "fast_path",
+      "command": "ls -la src/",
+      "expected": "allow"
+    },
+    {
+      "id": "deny_reader_sensitive_argument",
+      "function": "hard_rule",
+      "command": "cat ~/.ssh/id_ed25519",
+      "expected": "deny",
+      "also_verify": "decide returns hard-rule, never fast-path; this is a string fixture, not a credential read"
+    },
+    {
+      "id": "unsafe_second_step",
+      "function": "fast_path",
+      "command": "git status && printf changed > fixture.txt",
+      "expected": null
+    },
+    {
+      "id": "redirect_changes_files",
+      "function": "fast_path",
+      "command": "git log > fixture.txt",
+      "expected": null
+    },
+    {
+      "id": "substitution_is_not_simple_read",
+      "function": "fast_path",
+      "command": "echo $(whoami)",
+      "expected": null
+    },
+    {
+      "id": "pipe_into_interpreter",
+      "function": "fast_path",
+      "command": "git status | sh",
+      "expected": null
+    },
+    {
+      "id": "quoted_path_needs_no_shortcut",
+      "function": "fast_path",
+      "command": "cd src && cat \"a b\"",
+      "expected": null
+    },
+    {
+      "id": "read_only_chain",
+      "function": "fast_path",
+      "command": "cd src && git status | head -5",
+      "expected": "allow"
+    },
+    {
+      "id": "harmless_stderr_redirect_reference",
+      "function": "fast_path",
+      "command": "ls 2>/dev/null && git diff",
+      "expected": "allow"
+    },
+    {
+      "id": "multiline_does_not_inherit_safe_prefix",
+      "function": "fast_path",
+      "command": "git status\nprintf changed > fixture.txt",
+      "expected": null
+    }
+  ]
+}
