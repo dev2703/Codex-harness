@@ -513,7 +513,7 @@ impl ToolOutput for ExecCommandToolOutput {
             original_token_count: self.original_token_count,
             output: match self.max_output_tokens {
                 Some(max_tokens) => self.truncated_output(max_tokens),
-                None => self.raw_output.text.clone(),
+                None => self.raw_output.render(/*policy*/ None, self.original_token_count),
             },
         };
 
