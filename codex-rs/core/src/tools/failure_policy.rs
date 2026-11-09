@@ -52,11 +52,36 @@ struct Observation {
 }
 
 /// Safe recent evidence. Contains no model-provided command or error text.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct RepeatedFailure {
     pub(super) matching_failures: usize,
     pub(super) tool: &'static str,
     pub(super) exit_code: i32,
+}
+
+pub(super) fn primary_replan_enabled(enabled: bool, is_worker: bool, is_reviewer: bool) -> bool {
+    enabled && !is_worker && !is_reviewer
+}
+
+/// Delivers at most one advisory per originating turn, even across later streaks.
+#[derive(Default)]
+pub(super) struct ReplanNoticeState {
+    pending: Option<RepeatedFailure>,
+    delivered: bool,
+}
+
+impl ReplanNoticeState {
+    pub(super) fn queue(&mut self, diagnostic: Option<RepeatedFailure>) {
+        if !self.delivered {
+            self.pending = diagnostic;
+        }
+    }
+
+    pub(super) fn take(&mut self) -> Option<RepeatedFailure> {
+        let notice = self.pending.take()?;
+        self.delivered = true;
+        Some(notice)
+    }
 }
 
 #[derive(Default)]
@@ -393,4 +418,61 @@ mod tests {
         assert!(failure(&"x".repeat(MAX_IDENTITY_BYTES + 1), "failed").is_none());
         assert!(FailureFingerprint::new("shell", &["true".into()], "/project", 0, "").is_none());
     }
+    #[test]
+    fn primary_replan_notice_is_bounded_to_one_per_turn() {
+        let event = || RepeatedFailure {
+            matching_failures: 3,
+            tool: "shell",
+            exit_code: 1,
+        };
+        let mut current_turn = ReplanNoticeState::default();
+        assert!(current_turn.take().is_none());
+        current_turn.queue(Some(event()));
+        current_turn.queue(Some(event()));
+        assert_eq!(current_turn.take(), Some(event()));
+        current_turn.queue(Some(event()));
+        assert!(current_turn.take().is_none());
+        let mut next_turn = ReplanNoticeState::default();
+        next_turn.queue(Some(event()));
+        assert_eq!(next_turn.take(), Some(event()));
+    }
+
+    #[test]
+    fn progress_cancels_undelivered_replan_without_consuming_turn_budget() {
+        let event = || RepeatedFailure {
+            matching_failures: 3,
+            tool: "shell",
+            exit_code: 1,
+        };
+        let mut notice = ReplanNoticeState::default();
+        notice.queue(Some(event()));
+        notice.queue(None);
+        assert!(notice.take().is_none());
+        notice.queue(Some(event()));
+        assert_eq!(notice.take(), Some(event()));
+        notice.queue(None);
+        notice.queue(Some(event()));
+        assert!(notice.take().is_none());
+    }
+
+
+    #[test]
+    fn later_relevant_completion_clears_undelivered_notice() {
+        let mut notice = ReplanNoticeState::default();
+        notice.queue(Some(RepeatedFailure { matching_failures: 3, tool: "shell", exit_code: 1 }));
+        notice.queue(None);
+        assert!(notice.take().is_none());
+    }
+
+    #[test]
+    fn primary_replan_requires_opt_in_and_excludes_reviewers_and_workers() {
+        for enabled in [false, true] {
+            for worker in [false, true] {
+                for reviewer in [false, true] {
+                    assert_eq!(primary_replan_enabled(enabled, worker, reviewer), enabled && !worker && !reviewer);
+                }
+            }
+        }
+    }
+
 }

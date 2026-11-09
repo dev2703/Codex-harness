@@ -668,6 +668,9 @@ pub struct Config {
     /// Token usage threshold triggering auto-compaction of conversation history.
     pub model_auto_compact_token_limit: Option<i64>,
 
+    /// Opt-in, bounded primary-model reminder; never blocks tools or starts agents.
+    pub harness_replan_after_repeated_failure: bool,
+
     /// Controls whether `model_auto_compact_token_limit` applies to the full
     /// active context or only tokens after the carried compaction-window prefix.
     pub model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope,
@@ -4617,6 +4620,9 @@ impl Config {
             review_model,
             model_context_window: cfg.model_context_window,
             model_auto_compact_token_limit: cfg.model_auto_compact_token_limit,
+            harness_replan_after_repeated_failure: cfg
+                .harness_replan_after_repeated_failure
+                .unwrap_or_default(),
             model_auto_compact_token_limit_scope: cfg
                 .model_auto_compact_token_limit_scope
                 .unwrap_or_default(),

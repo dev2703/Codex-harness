@@ -252,6 +252,7 @@ async fn new_config(
         review_model: None,
         model_context_window: None,
         model_auto_compact_token_limit: None,
+        harness_replan_after_repeated_failure: false,
         model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope::Total,
         model_post_turn_compact_threshold_percent: 0,
         async_compaction_threshold_percent: 65,

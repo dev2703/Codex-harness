@@ -68,7 +68,7 @@
         "max_concurrent_threads_per_session": {
           "description": "Maximum number of spawned agent threads that can be open concurrently per session. When unset, the selected multi-agent backend uses its default.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "max_depth": {
@@ -363,8 +363,8 @@
         "model_async_compact_threshold_percent": {
           "description": "Percentage of the model's full context window that starts background compaction. Defaults to 65; valid values are 1–100, including when disabled.",
           "format": "uint8",
-          "maximum": 100.0,
-          "minimum": 1.0,
+          "maximum": 100,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -435,7 +435,7 @@
         "conversation_history_max_output_tokens": {
           "description": "Maximum estimated tokens per Guardian history-tool response, before the standard serialization allowance. Defaults to 4,000; stricter parent tool limits still apply.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "experimental_conversation_history_prompt": {
@@ -457,7 +457,7 @@
         "timeout_ms": {
           "description": "Overall Guardian review budget in milliseconds, including setup and retries. Defaults to 90,000. Set to 0 to wait without a review deadline; cancellation and independent transport timeouts still apply.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -483,7 +483,7 @@
           "default": 300000,
           "description": "Maximum time to wait for the refresh command to complete.",
           "format": "uint64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -502,7 +502,7 @@
         "max_body_bytes": {
           "default": 8388608,
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "placeholder_access_key_id": {
@@ -512,7 +512,7 @@
         "port": {
           "default": 443,
           "format": "uint16",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "region": {
@@ -560,13 +560,13 @@
         "max_body_bytes": {
           "default": 8388608,
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "port": {
           "default": 443,
           "format": "uint16",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "replacements": {
@@ -666,7 +666,7 @@
         "default_exec_yield_time_ms": {
           "description": "Default yield timeout for code-mode exec calls, in milliseconds.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "direct_only_tool_namespaces": {
@@ -693,7 +693,7 @@
         "tool_input_schema_max_bytes": {
           "description": "Maximum UTF-8 bytes per rendered tool input type, with a 16,000-byte minimum and default. For ordinary MCP tools, this is also at least their server's explicitly configured input limit.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -1652,7 +1652,7 @@
           "default": 30000,
           "description": "Maximum time to wait for the credential export command to complete.",
           "format": "uint64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -1721,7 +1721,7 @@
         },
         "reminder_interval_seconds": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "sleep_tool": {
@@ -1997,7 +1997,7 @@
         "glob_scan_max_depth": {
           "description": "Optional maximum depth for expanding unreadable glob patterns on platforms that snapshot glob matches before sandbox startup.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -2142,7 +2142,7 @@
         },
         "redirect_port": {
           "format": "uint16",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "resource": {
@@ -2192,7 +2192,7 @@
         "max_goal_token_budget": {
           "description": "Maximum token budget allowed for a goal and default budget for new goals.",
           "format": "uint64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -2235,18 +2235,18 @@
       "properties": {
         "max_section_entry_tokens": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "max_total_section_tokens": {
           "description": "Upper bound for the section's allocation. Omit to use the global request budget as the upper bound.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "min_total_section_tokens": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -2263,7 +2263,7 @@
         "async_classifier_conversation_token_limit": {
           "description": "Reset retained async history when the next request exceeds this token estimate. Defaults to 100,000. Fresh requests remain subject to the model's input limit.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "async_classifier_mode": {
@@ -2286,25 +2286,25 @@
         },
         "max_action_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "max_classifier_instruction_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "max_parent_compaction_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "max_tool_call_lag": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "persist_scores": {
@@ -2322,8 +2322,8 @@
         },
         "review_threshold": {
           "format": "double",
-          "maximum": 1.0,
-          "minimum": 0.0,
+          "maximum": 1,
+          "minimum": 0,
           "type": "number"
         },
         "sync_elastic_budgeting": {
@@ -2380,31 +2380,31 @@
         },
         "max_message_entry_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "max_message_transcript_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "max_recent_non_user_entries": {
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "max_tool_entry_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "max_tool_transcript_tokens": {
           "format": "uint",
-          "maximum": 100000.0,
-          "minimum": 100.0,
+          "maximum": 100000,
+          "minimum": 100,
           "type": "integer"
         },
         "sources": {
@@ -2443,7 +2443,7 @@
           "default": null,
           "description": "If set, the maximum size of the history file in bytes. The oldest entries are dropped once the file exceeds this limit.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "persistence": {
@@ -2483,7 +2483,7 @@
             "additionalContextLimit": {
               "description": "Approximate token threshold for spilling this hook's `additionalContext` to disk. Unset uses 2,500 tokens; `0` disables spilling for this hook. The threshold is evaluated against the original context; a spilled preview also includes recovery metadata.",
               "format": "uint",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": "integer"
             },
             "async": {
@@ -2504,7 +2504,7 @@
             "timeout": {
               "default": null,
               "format": "uint64",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": "integer"
             },
             "type": {
@@ -2537,7 +2537,7 @@
             "timeout": {
               "default": null,
               "format": "uint64",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": "integer"
             },
             "tool": {
@@ -2908,7 +2908,7 @@
         "callback_port": {
           "description": "Fixed callback port that takes precedence over Codex's global OAuth callback port.",
           "format": "uint16",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "callback_url": {
@@ -2949,7 +2949,7 @@
         "output_token_limit": {
           "description": "Token budget for this tool's output, before the standard 20% serialization allowance.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -3009,8 +3009,8 @@
         "max_raw_memories_for_consolidation": {
           "description": "Maximum number of recent raw memories retained for global consolidation.",
           "format": "uint",
-          "maximum": 4096.0,
-          "minimum": 1.0,
+          "maximum": 4096,
+          "minimum": 1,
           "type": "integer"
         },
         "max_rollout_age_days": {
@@ -3021,8 +3021,8 @@
         "max_rollouts_per_startup": {
           "description": "Maximum number of rollout candidates processed per pass.",
           "format": "uint",
-          "maximum": 128.0,
-          "minimum": 1.0,
+          "maximum": 128,
+          "minimum": 1,
           "type": "integer"
         },
         "max_unused_days": {
@@ -3033,8 +3033,8 @@
         "min_rate_limit_remaining_percent": {
           "description": "Minimum remaining percentage required in Codex rate-limit windows before memory startup runs.",
           "format": "int64",
-          "maximum": 100.0,
-          "minimum": 0.0,
+          "maximum": 100,
+          "minimum": 0,
           "type": "integer"
         },
         "min_rollout_idle_hours": {
@@ -3068,13 +3068,13 @@
       "anyOf": [
         {
           "format": "uint16",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         {
           "items": {
             "format": "uint16",
-            "minimum": 1.0,
+            "minimum": 1,
             "type": "integer"
           },
           "type": "array"
@@ -3085,7 +3085,7 @@
     "ModelAvailabilityNuxConfig": {
       "additionalProperties": {
         "format": "uint32",
-        "minimum": 0.0,
+        "minimum": 0,
         "type": "integer"
       },
       "type": "object"
@@ -3118,14 +3118,14 @@
           "default": 300000,
           "description": "Maximum age for the cached token before rerunning the command. Set to `0` to disable proactive refresh and only rerun after a 401 retry path.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "timeout_ms": {
           "default": 5000,
           "description": "Maximum time to wait for the token command to exit successfully.",
           "format": "uint64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -3285,7 +3285,7 @@
         "request_max_retries": {
           "description": "Maximum number of times to retry a failed HTTP request to this provider.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "requires_openai_auth": {
@@ -3296,13 +3296,13 @@
         "stream_idle_timeout_ms": {
           "description": "Idle timeout (in milliseconds) to wait for activity on a streaming response before treating the connection as lost.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "stream_max_retries": {
           "description": "Number of times to retry reconnecting a dropped streaming response before failing.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "supports_standalone_web_search": {
@@ -3318,7 +3318,7 @@
         "websocket_connect_timeout_ms": {
           "description": "Maximum time (in milliseconds) to wait for a websocket connection attempt before treating it as failed.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "wire_api": {
@@ -3338,8 +3338,8 @@
       "properties": {
         "default_wait_timeout_ms": {
           "format": "int64",
-          "maximum": 3600000.0,
-          "minimum": 0.0,
+          "maximum": 3600000,
+          "minimum": 0,
           "type": "integer"
         },
         "disable_direct_message": {
@@ -3362,13 +3362,13 @@
         },
         "max_concurrent_threads_per_session": {
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "max_wait_timeout_ms": {
           "format": "int64",
-          "maximum": 3600000.0,
-          "minimum": 0.0,
+          "maximum": 3600000,
+          "minimum": 0,
           "type": "integer"
         },
         "message_board_in_memory": {
@@ -3385,8 +3385,8 @@
         },
         "min_wait_timeout_ms": {
           "format": "int64",
-          "maximum": 3600000.0,
-          "minimum": 0.0,
+          "maximum": 3600000,
+          "minimum": 0,
           "type": "integer"
         },
         "multi_agent_mode_hint_text": {
@@ -3514,7 +3514,7 @@
           "default": [],
           "items": {
             "format": "uint16",
-            "minimum": 0.0,
+            "minimum": 0,
             "type": "integer"
           },
           "type": "array"
@@ -3589,8 +3589,8 @@
         "version": {
           "description": "Set to 2 when using origin-scoped hooks or credential substitution.",
           "format": "uint8",
-          "maximum": 2.0,
-          "minimum": 2.0,
+          "maximum": 2,
+          "minimum": 2,
           "type": "integer"
         }
       },
@@ -4459,7 +4459,7 @@
         "startup_timeout_ms": {
           "default": null,
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "startup_timeout_sec": {
@@ -4475,7 +4475,7 @@
           "default": null,
           "description": "UTF-8 byte threshold for compacting each ordinary MCP tool input schema. Defaults to 5,000 bytes. Code Mode also uses an explicitly configured limit when rendering each tool's input type. Larger limits preserve more parameter descriptions.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "tool_timeout_sec": {
@@ -4718,12 +4718,12 @@
         },
         "limit_tokens": {
           "format": "int64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "prefill_token_weight": {
           "format": "double",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "number"
         },
         "reminder_at_remaining_tokens": {
@@ -4736,7 +4736,7 @@
         },
         "sampling_token_weight": {
           "format": "double",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "number"
         }
       },
@@ -4950,7 +4950,7 @@
         "max_context_tokens": {
           "description": "Maximum tokens used by the available-skills catalog. Defaults to 2% of the model context window and is capped at 10,000 tokens when set.",
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -5011,7 +5011,7 @@
         "auto_compact_fallback_buffer_tokens": {
           "description": "Additional tokens available after the compaction threshold for fallback note-taking.",
           "format": "int64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "auto_compact_fallback_prompt": {
@@ -5036,7 +5036,7 @@
         "reminder_threshold_tokens": {
           "description": "Number of tokens remaining before auto-compaction when the wrap-up reminder is emitted.",
           "format": "int64",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": "integer"
         },
         "use_history_notes_extension": {
@@ -5093,7 +5093,7 @@
           "default": 2048,
           "description": "Maximum UTF-8 bytes before the truncation notice. Defaults to 2048.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -5517,7 +5517,7 @@
         "mouse_scroll_speed": {
           "default": null,
           "description": "Mouse wheel speed multiplier for transcript scrolling, based on one row per event. Defaults to `1.0`. Positive fractional values slow scrolling; values above `1.0` speed it up.",
-          "exclusiveMinimum": 0.0,
+          "exclusiveMinimum": 0,
           "format": "double",
           "type": "number"
         },
@@ -5639,8 +5639,8 @@
           "default": null,
           "description": "Preferred docked sidebar width as a percentage of the terminal. Defaults to one third.",
           "format": "uint8",
-          "maximum": 99.0,
-          "minimum": 1.0,
+          "maximum": 99,
+          "minimum": 1,
           "type": "integer"
         },
         "status_line": {
@@ -5660,7 +5660,7 @@
           "default": null,
           "description": "Trim terminal resize-reflow replay to the most recent rendered terminal rows when the transcript exceeds this cap. Omit to use Codex's terminal-specific default. Set to `0` to keep all rendered rows.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "terminal_title": {
@@ -7762,7 +7762,7 @@
     "background_terminal_max_timeout": {
       "description": "Maximum poll window for background terminal output (`write_stdin`), in milliseconds. Default: `300000` (5 minutes).",
       "format": "uint64",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "browser_use": {
@@ -8602,6 +8602,10 @@
       ],
       "description": "Goal-related settings."
     },
+    "harness_replan_after_repeated_failure": {
+      "description": "Ask the existing primary model to assess repeated failures once per turn. Disabled by default.",
+      "type": "boolean"
+    },
     "hide_agent_reasoning": {
       "default": false,
       "description": "When set to `true`, `AgentReasoning` events will be hidden from the UI/output. Defaults to `false`.",
@@ -8679,7 +8683,7 @@
     "mcp_oauth_callback_port": {
       "description": "Optional fixed port for the local HTTP callback server used during MCP OAuth login. When unset, Codex will bind to an ephemeral port chosen by the OS.",
       "format": "uint16",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "mcp_oauth_callback_url": {
@@ -8698,7 +8702,7 @@
     "mcp_optional_startup_grace_ms": {
       "description": "Milliseconds to wait for optional MCP servers while building the initial tool catalog.\n\nDefaults to 1000. Set to 0 to disable the shared grace and wait for each server's configured `startup_timeout_sec` instead.",
       "format": "uint64",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "mcp_servers": {
@@ -8758,8 +8762,8 @@
     "model_post_turn_compact_threshold_percent": {
       "description": "Percentage of the usable context window that triggers compaction after a final response. Existing auto-compaction limits still apply. Omitted or zero disables turn-end compaction; valid values are 0–100.",
       "format": "uint8",
-      "maximum": 100.0,
-      "minimum": 0.0,
+      "maximum": 100,
+      "minimum": 0,
       "type": "integer"
     },
     "model_provider": {
@@ -8881,7 +8885,7 @@
       "default": 32768,
       "description": "Maximum total bytes of project instruction content across all selected environments.",
       "format": "uint",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "project_root_markers": {
@@ -8981,13 +8985,13 @@
     "thread_unload_delay_secs": {
       "description": "Seconds a thread must have no subscribers and no activity before app-server unloads it. Defaults to 60 (1 minute); zero unloads immediately. Resolved when each thread is loaded; request config overrides apply per thread.",
       "format": "uint64",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "tool_output_token_limit": {
       "description": "Token budget applied when storing tool/function outputs in the context manager.",
       "format": "uint",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "tool_suggest": {
