@@ -6,6 +6,39 @@ correction `9ac73cb8e36a565c85d15b70b5d3cfa34ae7c89f`. Replanning and strict rol
 validation remain disabled by default. Keep PR #1 draft until the native and
 live-model feature gates pass.
 
+## Passing native Linux gate
+
+[CI run 42610729199](https://github.com/dev2703/Codex-harness/actions/runs/42610729199)
+passes at Rust/source revision `f43a2346916a728bfe00bf48fb7028825286af56`:
+
+- Native CLI build; 97 focused Rust tests (7 codec, 4 command preparation,
+  16 failure policy, 4 observation, 15 output context, 4 role validation,
+  47 feature tests); library and binary Clippy with warnings denied.
+- Whole-workspace Rust formatting, 16 Linux Python guards, three real-command
+  policy replays, and exact-byte generated configuration schema verification.
+- All eight offline Bubblewrap acceptance groups, including separate native
+  save/inspect/continue processes, six concurrent publishers, killed publishers,
+  corrupt/unsupported/symlink/FIFO/oversized/authority-bearing input rejection,
+  permissions, repository mismatch/acknowledgement, distinct fresh sessions,
+  and a real native read-only shell write denial.
+- All 11 pinned Jev cases and nine Jev guard tests pass within isolation;
+  fixture command strings executed: zero; real model calls: zero.
+
+The CLI reports `codex-cli 0.0.0`; its SHA-256 is
+`48834967ec525e7defc35bcd8ef702ffd3a2a446237f449c9f7e7bb126a1b80d`.
+The read-only shell starts, then returns exit 2 with `Read-only file system`;
+the attempted file is absent. The namespace has only loopback, host credentials
+are not mounted, and only fixture storage is writable on the host.
+
+[The evidence artifact](https://github.com/dev2703/Codex-harness/actions/runs/42610729199/artifacts/13670953841)
+contains native build/test logs, the acceptance log and JSON process evidence.
+A reviewed local copy is `/private/tmp/harness-verified-evidence/`.
+The earlier run failed only at a large-enum lint; the boxed continuation
+arguments fix is included in the passing revision. Subsequent live-helper and
+documentation commits do not change the tested Rust source or offline runner.
+The final local Python guard count is 17, with one Linux-only test skipped on
+macOS.
+
 ## Reproducible Linux gate
 
 `.github/workflows/harness-policy.yml` runs on relevant pull requests, pushes to
@@ -47,7 +80,7 @@ The live scenarios in
 JSON evidence includes source revision, CLI version/hash, commands and outcomes.
 CI retains the reports and build logs as artifacts, including on failures.
 
-## Observed verification on 2026-11-09
+## Local host observations on 2026-11-09
 
 This continuation runs on an Apple Silicon macOS host. The earlier managed
 Linux environment is not connected through the available tools. Docker is

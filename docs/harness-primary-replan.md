@@ -20,9 +20,10 @@ delivery consumes the notice before that turn's next sampling request. A dropped
 turn does not carry its notice into another turn. Lock poisoning suppresses this
 optional advisory without authorizing anything.
 
-This experimental source has not been compiled or tested in a real CLI yet.
-The integrated policy tests and standalone Clippy pass; the native CLI gate
-remains pending. See [the acceptance runbook](harness-acceptance-runbook.md).
+The integrated native CLI builds, and its focused policy/observation tests,
+Clippy, formatting and schema checks pass. End-to-end advisory delivery after
+serial native failures remains unverified; the offline process suite covers
+handoff and read-only enforcement. See [the acceptance runbook](harness-acceptance-runbook.md).
 The added policy tests check empty state, coalescing, one notice per turn,
 progress cancellation, changed errors, and fresh state in the next turn. Before enabling in production, run focused Rust
 tests, configuration/schema checks, formatting/Clippy, and sandboxed native CLI

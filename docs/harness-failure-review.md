@@ -44,10 +44,11 @@ not evidence of progress.
 
 ## Validation status and real sandbox gate
 
-Three regression tests were added in source (one policy, two adapter tests).
-They have **not run** in this patch: the attached execution environment is
-offline/unavailable. Prior standalone results in `harness-experiments.md` apply
-to their recorded earlier revision, not to this correction.
+The integrated native CLI builds, all 16 policy and four observation tests pass,
+and formatting and Clippy pass in Linux CI. The three real-command standalone
+policy replays also pass. The built-CLI observer scenarios below remain separate
+from the handoff/read-only process suite; see
+[the current evidence](harness-acceptance-runbook.md).
 
 Before merging, run focused Rust tests and the integrated CLI in a sandbox:
 distinct resource-ID/date commands must stay quiet; three identical failures

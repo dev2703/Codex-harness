@@ -29,13 +29,13 @@ unchanged execution metadata.
 
 ## Validation gate
 
-Source audit only at preparation: Rust compilation, focused tests and real CLI
-sandbox execution have not been observed for this branch while the execution
-environment is unavailable/starting. Do not describe them as passed. No token,
-latency or accuracy gain is claimed.
+The integrated native CLI builds, all 15 focused context tests pass, and
+formatting and Clippy pass in Linux CI. Native handoff/read-only process
+acceptance also passes, but the large-output code-mode process case below
+remains unverified. See [the current evidence](harness-acceptance-runbook.md).
+No token, latency or accuracy gain is claimed.
 
-After runtime recovery, run the focused `codex-core` context tests, formatter and
-Cargo Clippy. Then exercise the built CLI's code-mode unified-exec path in a
+Exercise the built CLI's code-mode unified-exec path in a
 sandbox with output exceeding the collection cap: verify the model-facing result
 retains its omission notice and exit status both with omitted and explicit
 `max_output_tokens`. Exercise a small complete result as a counterexample and

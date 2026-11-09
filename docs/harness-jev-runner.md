@@ -12,7 +12,6 @@ python3 scripts/harness_jev_reference.py --reference /tmp/jev-reference
 
 ```
 
-
 The evaluator itself never fetches a branch or reaches a provider. It reads `jev_gate.py` and `policy.json` from the exact committed objects, not from potentially edited working-tree files. The source revision is fixed in code and must agree with the fixture.
 
 ## Isolation and scope
@@ -27,7 +26,12 @@ Timeouts, missing dependencies, inaccessible Git objects, malformed fixtures and
 
 ## Verification status
 
-Source prepared while the managed runtime is unavailable/starting. No execution result is claimed in this document. Run the two commands above in the recovered environment and record exact results before changing that status. These offline reference checks remain separate from real built-Codex sandbox and live-model handoff acceptance.
+All 11 pinned deterministic cases and nine guard tests pass inside the integrated
+Bubblewrap process suite in Linux CI. The report records zero model calls and
+zero fixture command strings executed. The runner also blocks Git transports
+before sandbox startup so missing promised objects cannot fetch. See
+[the current evidence](harness-acceptance-runbook.md). These offline reference
+checks remain separate from live-model handoff acceptance.
 
 ## Attribution
 

@@ -16,7 +16,11 @@ Write explicit notes:
   "completed": ["Located the relevant implementation"],
   "pending": ["Reproduce the failure", "Repair and rerun the tests"],
   "verification": [
-    {"command": "cargo test -p parser", "status": "unverified", "evidence": "Not run in this session"}
+    {
+      "command": "cargo test -p parser",
+      "status": "unverified",
+      "evidence": "Not run in this session"
+    }
   ]
 }
 ```
@@ -62,4 +66,10 @@ Run repository formatting and Cargo Clippy, then exercise the actual built CLI i
 6. Start a second independent real session using only the packet and current request. Verify it repairs the fixture, passes actual tests, and preserves the public API, sentinel and original packet.
 7. Start a separate continuation with the read-only sandbox. Observe an attempted fixture write fail, with no file created and no escalation/bypass.
 
-Unit tests are included for storage, codec and CLI preparation. They have not yet been executed in this preparation environment and cannot substitute for the real CLI/live-model scenarios. The shared acceptance plan is `harness-handoff-acceptance.md`. Authentication and runtime availability must be verified before reporting live-model outcomes.
+The native CLI build, seven codec tests, four command-preparation tests, formatting,
+Clippy, schema generation and offline process acceptance pass in Linux CI. The
+fixed native read-only tool case also passes. A real stock-CLI baseline using
+the production codec passes diagnosis and fresh-session repair; the fork's actual
+live command adapter remains unverified. Use `scripts/harness_handoff_live.py`
+for that gate. See [the current evidence](harness-acceptance-runbook.md) and the
+shared acceptance plan in `harness-handoff-acceptance.md`.

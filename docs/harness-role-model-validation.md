@@ -71,19 +71,20 @@ current user-selected available OpenAI models, real authentication, and recorded
 CLI source revision and actual child lifecycle events. Do not use a synthetic
 model response as evidence for these cases.
 
-| Case | Required observation | Status |
-| --- | --- | --- |
-| Enabled flag; role selects available compatible model | Child starts using the role-selected catalog slug; runtime records it | Not run |
-| Enabled flag; role selects unavailable model with no reasoning override | Spawn fails before a child/model request; error lists available alternatives | Not run |
-| Enabled flag; role selects catalog model incompatible with V2 | Spawn fails before child start | Not run |
-| Flag omitted or false | Existing role behavior is preserved; no new validation rejection is introduced | Not run |
-| Enabled flag under a custom provider | Existing custom-provider selection behavior is preserved | Not run |
-| Enabled flag; role inherits the parent model unchanged | No additional catalog check is imposed on inherited selection | Not run |
-| Parent sandbox read-only; role requests another model | Model selection cannot widen permissions; a benign fixture write remains denied | Not run |
-| Malformed role file or unsupported reasoning effort | Existing role/reasoning validation still fails appropriately | Not run |
+| Case                                                                    | Required observation                                                            | Status  |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------- |
+| Enabled flag; role selects available compatible model                   | Child starts using the role-selected catalog slug; runtime records it           | Not run |
+| Enabled flag; role selects unavailable model with no reasoning override | Spawn fails before a child/model request; error lists available alternatives    | Not run |
+| Enabled flag; role selects catalog model incompatible with V2           | Spawn fails before child start                                                  | Not run |
+| Flag omitted or false                                                   | Existing role behavior is preserved; no new validation rejection is introduced  | Not run |
+| Enabled flag under a custom provider                                    | Existing custom-provider selection behavior is preserved                        | Not run |
+| Enabled flag; role inherits the parent model unchanged                  | No additional catalog check is imposed on inherited selection                   | Not run |
+| Parent sandbox read-only; role requests another model                   | Model selection cannot widen permissions; a benign fixture write remains denied | Not run |
+| Malformed role file or unsupported reasoning effort                     | Existing role/reasoning validation still fails appropriately                    | Not run |
 
-**Execution status:** implementation and tests prepared through GitHub tooling
-while the execution environment was offline. Rust compilation, formatter,
-schema regeneration, focused tests and real-model sandbox cases have not run.
-Keep this change draft and unmerged until the checks above pass. No performance,
-token or accuracy improvement is claimed.
+**Execution status:** the integrated native CLI builds, four focused role tests
+and 47 feature tests pass, and formatting, Clippy and exact-byte schema
+regeneration pass in Linux CI. The real-model matrix above remains unverified.
+Keep this change draft and unmerged pending the remaining feature gates; see
+[the current evidence](harness-acceptance-runbook.md). No performance, token or
+accuracy improvement is claimed.

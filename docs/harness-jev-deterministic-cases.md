@@ -16,7 +16,7 @@ This is an evaluation reference, not a change to Codex permissions. A Jev label 
 
 The companion JSON fixtures contain command strings for classification only. They must not execute those command strings. Pin upstream policy/config, isolate HOME, remove TypeSafe/OpenRouter keys, disable network, and make any model function invocation fail the offline run.
 
-- Verify deny-before-fast-path precedence using secret-path-shaped *strings*, without reading actual credentials.
+- Verify deny-before-fast-path precedence using secret-path-shaped _strings_, without reading actual credentials.
 - Verify that changed command arguments and shell structure do not inherit a safe prefix's classification.
 - Verify that a chain of read-only steps has the expected reference classification, while redirects to real files and substitutions do not receive a shortcut.
 - Keep shell-classification checks distinct from repeated-failure detection: repeated successful reads are not loops, changing errors and repaired tests break failure streaks.
@@ -27,7 +27,11 @@ For durable handoff, use direct filesystem/CLI assertions for checksums, version
 
 After offline classification checks, run the built fork in isolated fixture workspaces. Verify actual tool exit codes, filesystem changes and permission enforcement, then run the two independent real-model handoff sessions specified in `harness-handoff-acceptance.md`. Label model decisions and latency as empirical observations, not deterministic guarantees.
 
-**Execution status:** source reviewed and reference fixtures recorded; not executed. The attached cloud environment remains unavailable/offline. No passing test or successful Jev integration is claimed.
+**Execution status:** all 11 pinned cases and nine guard tests pass inside the
+integrated offline Bubblewrap suite, with zero model calls and zero command
+strings executed. Native handoff process checks and fixed read-only enforcement
+also pass. Live behavior of the fork remains a separate gate; see
+[the current evidence](harness-acceptance-runbook.md).
 
 ## Attribution
 
