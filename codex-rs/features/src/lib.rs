@@ -257,6 +257,8 @@ pub enum Feature {
     SubagentThreadEnvironments,
     /// Use each subagent model's default context window and auto-compaction threshold.
     SubagentDefaultContextLimits,
+    /// Require role-selected OpenAI subagent models to be available in the catalog.
+    StrictRoleModelValidation,
     /// Keep sampling through reasoning and commentary boundaries when agent mail arrives.
     /// Pending mail is delivered at the next normal input boundary instead.
     DeferMailboxPreemption,
@@ -1669,6 +1671,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::SubagentDefaultContextLimits,
         key: "subagent_default_context_limits",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::StrictRoleModelValidation,
+        key: "strict_role_model_validation",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },
