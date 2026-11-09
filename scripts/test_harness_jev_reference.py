@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Safety and source-shape checks for the Jev reference runner; no network or API keys."""
+from __future__ import annotations
+
+import copy
+import importlib.util
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+SCRIPT = Path(__file__).with_name("harness_jev_reference.py")
+SPEC = importlib.util.spec_from_file_location("harness_jev_reference", SCRIPT)
+runner = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = runner
+SPEC.loader.exec_module(runner)
+
+# Synthetic source is deliberately not an upstream copy. It has an unreachable
+# model branch that would fail if the runner included more than the typed prefix.
+SOURCE = """
+COMPOUND = re.compile(r"[;&]")
+CHAIN_SPLIT = re.compile(r"&&")
+HARMLESS_REDIRECT = re.compile(r"2>/dev/null")
+CD = re.compile(r"^cd ")
+def hard_rule(command: str) -> Decision | None:
+    if command == "blocked":
+        return Decision("deny", "hard-rule", "fixture")
+    return None
+def _one(command: str) -> bool:
+    return command == "safe"
+def fast_path(command: str) -> Decision | None:
+    if command in ("safe", "blocked"):
+        return Decision("allow", "fast-path", "fixture")
+    return None
+def decide(command: str, tool: str = "Bash", user_message: str = "", cwd: str = "") -> Decision:
+    if found := hard_rule(command):
+        return found
+    if found := fast_path(command):
+        return found
+    return ask_jev("MUST_NOT_CALL_MODEL", "MUST_NOT_READ_KEY")
+"""
+
+
+def fixture(command="blocked", expected="deny", function="hard_rule"):
+    return {
+        "reference_repository": runner.REFERENCE,
+        "reference_commit": runner.REVISION,
+        "requirements": {
+            "network": False, "model_calls": 0,
+            "isolated_home": True, "pinned_default_policy": True,
+        },
+        "cases": [{"id": "fixture", "function": function, "command": command, "expected": expected}],
+    }
+
+
+class ReferenceRunnerTests(unittest.TestCase):
+    def test_deny_order_is_evaluated_even_if_fast_path_also_allows(self):
+        data = fixture()
+        data["cases"][0]["also_verify"] = "deterministic order"
+        result = runner.evaluate({"fixture": data, "source": SOURCE, "policy": {"hard_deny": [], "fast_path": []}})
+        self.assertEqual(result["passed"], 1)
+        self.assertEqual(result["cases"][0]["ordered_source"], "hard-rule")
+
+    def test_model_branch_is_absent_for_an_ambiguous_command(self):
+        namespace = runner.deterministic_namespace(SOURCE, {"hard_deny": [], "fast_path": []})
+        self.assertIsNone(namespace["decide_prefix"]("ambiguous"))
+        self.assertNotIn("ask_jev", namespace)
+        self.assertNotIn("os", namespace)
+        self.assertNotIn("subprocess", namespace)
+
+    def test_reversed_source_order_is_an_error(self):
+        source = SOURCE.replace("if found := hard_rule(command):", "if found := fast_path(command):", 1)
+        with self.assertRaisesRegex(ValueError, "hard rules before"):
+            runner.deterministic_namespace(source, {"hard_deny": [], "fast_path": []})
+
+    def test_command_strings_are_data_and_never_executed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "must-not-exist"
+            data = fixture(command=f"touch {marker}", expected=None, function="fast_path")
+            result = runner.evaluate({"fixture": data, "source": SOURCE, "policy": {"hard_deny": [], "fast_path": []}})
+            self.assertEqual(result["passed"], 1)
+            self.assertFalse(marker.exists())
+            self.assertEqual(result["command_strings_executed"], 0)
+
+    def test_fixture_cannot_select_another_commit_or_disable_isolation(self):
+        for key, value in [
+            ("reference_commit", "main"),
+            ("reference_repository", "someone/else"),
+            ("requirements", {"network": True}),
+        ]:
+            data = fixture()
+            data[key] = value
+            with self.assertRaises(ValueError):
+                runner.validate_fixture(data)
+
+    def test_unsupported_functions_duplicate_ids_and_oversized_commands_fail(self):
+        data = fixture()
+        data["cases"][0]["function"] = "ask_jev"
+        with self.assertRaises(ValueError):
+            runner.validate_fixture(data)
+        data = fixture()
+        data["cases"].append(copy.deepcopy(data["cases"][0]))
+        with self.assertRaises(ValueError):
+            runner.validate_fixture(data)
+        data = fixture(command="x" * (runner.MAX_COMMAND + 1))
+        with self.assertRaises(ValueError):
+            runner.validate_fixture(data)
+
+    def test_worker_refuses_the_current_network_namespace(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payload.json"
+            path.write_text(json.dumps({"outer_netns": os.readlink("/proc/self/ns/net")}))
+            with self.assertRaisesRegex(RuntimeError, "distinct loopback-only"):
+                runner.worker(path)
+
+
+if __name__ == "__main__":
+    unittest.main()
