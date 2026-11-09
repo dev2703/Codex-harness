@@ -44,8 +44,16 @@ fn strict_role_catalog_validation_is_opt_in() {
 #[test]
 fn inherited_models_and_non_openai_providers_keep_existing_behavior() {
     for (provider, previous, selected) in [
-        ("custom-provider", Some("fixture-primary"), Some("fixture-worker")),
-        (OPENAI_PROVIDER_ID, Some("fixture-primary"), Some("fixture-primary")),
+        (
+            "custom-provider",
+            Some("fixture-primary"),
+            Some("fixture-worker"),
+        ),
+        (
+            OPENAI_PROVIDER_ID,
+            Some("fixture-primary"),
+            Some("fixture-primary"),
+        ),
         (OPENAI_PROVIDER_ID, Some("fixture-primary"), None),
     ] {
         assert!(!should_validate_role_model_override(
@@ -67,9 +75,8 @@ fn configured_role_model_uses_the_existing_catalog_membership_rule() {
         find_spawn_agent_model_name(&catalog, "fixture-worker", MultiAgentVersion::V2),
         Ok("fixture-worker".to_string()),
     );
-    let error =
-        find_spawn_agent_model_name(&catalog, "unavailable-worker", MultiAgentVersion::V2)
-            .expect_err("unknown role model must fail catalog validation");
+    let error = find_spawn_agent_model_name(&catalog, "unavailable-worker", MultiAgentVersion::V2)
+        .expect_err("unknown role model must fail catalog validation");
     assert!(error.contains("Unknown model"));
     assert!(error.contains("fixture-worker"));
 }

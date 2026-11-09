@@ -602,5 +602,8 @@ fn exec_command_code_mode_result_preserves_collection_omission_evidence() {
     // Complete output must remain byte-for-byte unchanged.
     output.raw_output.omitted_bytes = 0;
     output.raw_output.text = "complete output".to_string();
-    assert_eq!(output.code_mode_result(&payload)["output"], "complete output");
+    assert_eq!(
+        output.code_mode_result(&payload)["output"],
+        "complete output"
+    );
 }

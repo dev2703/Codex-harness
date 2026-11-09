@@ -1,5 +1,10 @@
 # Durable context handoff: real CLI acceptance gate
 
+Current integration, reproducible CI commands and verification evidence are in
+[the acceptance runbook](harness-acceptance-runbook.md). The checkpoint below
+records the earlier disconnected managed environment; its HTTP 401 observation
+has since been superseded by a successful stock-CLI authentication probe.
+
 The user selected durable context handoff as the next feature on 2026-11-09 and explicitly required real sandboxed functionality tests, beyond regression, unit or integration tests. No new feature should be described as working merely because its tests compile or pass.
 
 ## Intended functionality

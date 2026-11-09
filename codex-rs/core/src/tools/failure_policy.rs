@@ -455,11 +455,14 @@ mod tests {
         assert!(notice.take().is_none());
     }
 
-
     #[test]
     fn later_relevant_completion_clears_undelivered_notice() {
         let mut notice = ReplanNoticeState::default();
-        notice.queue(Some(RepeatedFailure { matching_failures: 3, tool: "shell", exit_code: 1 }));
+        notice.queue(Some(RepeatedFailure {
+            matching_failures: 3,
+            tool: "shell",
+            exit_code: 1,
+        }));
         notice.queue(None);
         assert!(notice.take().is_none());
     }
@@ -469,10 +472,12 @@ mod tests {
         for enabled in [false, true] {
             for worker in [false, true] {
                 for reviewer in [false, true] {
-                    assert_eq!(primary_replan_enabled(enabled, worker, reviewer), enabled && !worker && !reviewer);
+                    assert_eq!(
+                        primary_replan_enabled(enabled, worker, reviewer),
+                        enabled && !worker && !reviewer
+                    );
                 }
             }
         }
     }
-
 }

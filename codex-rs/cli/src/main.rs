@@ -59,13 +59,13 @@ mod daemon_telemetry;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod desktop_app;
 mod doctor;
-mod handoff_cmd;
 #[cfg(test)]
 #[path = "exec_args_tests.rs"]
 mod exec_args_tests;
 #[cfg(test)]
 #[path = "exec_server_args_tests.rs"]
 mod exec_server_args_tests;
+mod handoff_cmd;
 mod marketplace_cmd;
 mod mcp_cmd;
 mod mcp_login;
@@ -1182,7 +1182,10 @@ async fn dispatch_cli(
             )?;
             if let Some(mut exec_cli) = handoff_cmd::prepare(command, &interactive.shared)? {
                 exec_cli.strict_config |= root_strict_config;
-                prepend_config_flags(&mut exec_cli.config_overrides, root_config_overrides.clone());
+                prepend_config_flags(
+                    &mut exec_cli.config_overrides,
+                    root_config_overrides.clone(),
+                );
                 Box::pin(codex_exec::run_main(exec_cli, arg0_paths.clone())).await?;
             }
         }

@@ -19,7 +19,10 @@ fn replan_enabled(turn: &TurnContext) -> bool {
     primary_replan_enabled(
         turn.config.harness_replan_after_repeated_failure,
         turn.parent_thread_id.is_some()
-            || matches!(turn.session_source, codex_protocol::protocol::SessionSource::SubAgent(_)),
+            || matches!(
+                turn.session_source,
+                codex_protocol::protocol::SessionSource::SubAgent(_)
+            ),
         crate::guardian::is_basic_session_source(&turn.session_source),
     )
 }
@@ -62,7 +65,9 @@ pub(crate) fn take_replan_notice(turn: &TurnContext) -> Option<String> {
     if !replan_enabled(turn) {
         return None;
     }
-    let state = turn.extension_data.get::<Mutex<FailureObservationState>>()?;
+    let state = turn
+        .extension_data
+        .get::<Mutex<FailureObservationState>>()?;
     let diagnostic = state.lock().ok()?.replan.take()?;
     Some(format!(
         "The harness observed {} matching failed {} command completions (exit {}). Assess whether these were parallel, intentional retries, or an actual non-progress loop before deciding what to do. If progress has stalled, reconsider the command inputs, failure evidence and repair plan rather than blindly repeating the same operation. This diagnostic does not authorize tools, escalation, extra agents or additional model calls. Existing approvals and sandbox boundaries still apply.",

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Safety and source-shape checks for the Jev reference runner; no network or API keys."""
+
 from __future__ import annotations
 
 import copy
@@ -47,10 +48,19 @@ def fixture(command="blocked", expected="deny", function="hard_rule"):
         "reference_repository": runner.REFERENCE,
         "reference_commit": runner.REVISION,
         "requirements": {
-            "network": False, "model_calls": 0,
-            "isolated_home": True, "pinned_default_policy": True,
+            "network": False,
+            "model_calls": 0,
+            "isolated_home": True,
+            "pinned_default_policy": True,
         },
-        "cases": [{"id": "fixture", "function": function, "command": command, "expected": expected}],
+        "cases": [
+            {
+                "id": "fixture",
+                "function": function,
+                "command": command,
+                "expected": expected,
+            }
+        ],
     }
 
 
@@ -58,27 +68,45 @@ class ReferenceRunnerTests(unittest.TestCase):
     def test_deny_order_is_evaluated_even_if_fast_path_also_allows(self):
         data = fixture()
         data["cases"][0]["also_verify"] = "deterministic order"
-        result = runner.evaluate({"fixture": data, "source": SOURCE, "policy": {"hard_deny": [], "fast_path": []}})
+        result = runner.evaluate(
+            {
+                "fixture": data,
+                "source": SOURCE,
+                "policy": {"hard_deny": [], "fast_path": []},
+            }
+        )
         self.assertEqual(result["passed"], 1)
         self.assertEqual(result["cases"][0]["ordered_source"], "hard-rule")
 
     def test_model_branch_is_absent_for_an_ambiguous_command(self):
-        namespace = runner.deterministic_namespace(SOURCE, {"hard_deny": [], "fast_path": []})
+        namespace = runner.deterministic_namespace(
+            SOURCE, {"hard_deny": [], "fast_path": []}
+        )
         self.assertIsNone(namespace["decide_prefix"]("ambiguous"))
         self.assertNotIn("ask_jev", namespace)
         self.assertNotIn("os", namespace)
         self.assertNotIn("subprocess", namespace)
 
     def test_reversed_source_order_is_an_error(self):
-        source = SOURCE.replace("if found := hard_rule(command):", "if found := fast_path(command):", 1)
+        source = SOURCE.replace(
+            "if found := hard_rule(command):", "if found := fast_path(command):", 1
+        )
         with self.assertRaisesRegex(ValueError, "hard rules before"):
             runner.deterministic_namespace(source, {"hard_deny": [], "fast_path": []})
 
     def test_command_strings_are_data_and_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "must-not-exist"
-            data = fixture(command=f"touch {marker}", expected=None, function="fast_path")
-            result = runner.evaluate({"fixture": data, "source": SOURCE, "policy": {"hard_deny": [], "fast_path": []}})
+            data = fixture(
+                command=f"touch {marker}", expected=None, function="fast_path"
+            )
+            result = runner.evaluate(
+                {
+                    "fixture": data,
+                    "source": SOURCE,
+                    "policy": {"hard_deny": [], "fast_path": []},
+                }
+            )
             self.assertEqual(result["passed"], 1)
             self.assertFalse(marker.exists())
             self.assertEqual(result["command_strings_executed"], 0)
@@ -110,13 +138,27 @@ class ReferenceRunnerTests(unittest.TestCase):
     def test_local_git_replace_cannot_change_the_pinned_source(self):
         import subprocess
         from unittest.mock import patch
+
         with tempfile.TemporaryDirectory() as directory:
             reference = Path(directory)
+
             def git(*arguments):
                 return subprocess.check_output(
-                    ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
-                     "-c", "commit.gpgsign=false", "-C", directory, *arguments], text=True,
+                    [
+                        "git",
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=fixture@example.invalid",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-C",
+                        directory,
+                        *arguments,
+                    ],
+                    text=True,
                 ).strip()
+
             git("init", "--quiet")
             path = reference / "jev_gate.py"
             path.write_text("original source\n")
@@ -127,15 +169,24 @@ class ReferenceRunnerTests(unittest.TestCase):
             git("commit", "-qam", "replacement")
             replacement = git("rev-parse", "HEAD")
             git("replace", original, replacement)
-            self.assertEqual(git("show", f"{original}:jev_gate.py"), "replacement source")
+            self.assertEqual(
+                git("show", f"{original}:jev_gate.py"), "replacement source"
+            )
             with patch.object(runner, "REVISION", original):
-                self.assertEqual(runner.committed_file(reference, "jev_gate.py"), "original source\n")
+                self.assertEqual(
+                    runner.committed_file(reference, "jev_gate.py"), "original source\n"
+                )
 
     def test_worker_refuses_the_current_network_namespace(self):
         import os
+
+        if not Path("/proc/self/ns/net").exists():
+            self.skipTest("requires Linux network namespaces")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "payload.json"
-            path.write_text(json.dumps({"outer_netns": os.readlink("/proc/self/ns/net")}))
+            path.write_text(
+                json.dumps({"outer_netns": os.readlink("/proc/self/ns/net")})
+            )
             with self.assertRaisesRegex(RuntimeError, "distinct loopback-only"):
                 runner.worker(path)
 

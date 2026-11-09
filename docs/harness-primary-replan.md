@@ -21,7 +21,8 @@ turn does not carry its notice into another turn. Lock poisoning suppresses this
 optional advisory without authorizing anything.
 
 This experimental source has not been compiled or tested in a real CLI yet.
-The managed environment is starting; keep the PR draft pending validation.
+The integrated policy tests and standalone Clippy pass; the native CLI gate
+remains pending. See [the acceptance runbook](harness-acceptance-runbook.md).
 The added policy tests check empty state, coalescing, one notice per turn,
 progress cancellation, changed errors, and fresh state in the next turn. Before enabling in production, run focused Rust
 tests, configuration/schema checks, formatting/Clippy, and sandboxed native CLI

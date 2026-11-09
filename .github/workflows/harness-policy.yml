@@ -1,0 +1,106 @@
+name: Harness policy acceptance
+
+on:
+  pull_request:
+    paths:
+      - "codex-rs/**"
+      - "scripts/harness*"
+      - "scripts/test_harness*"
+      - "scripts/fixtures/jev-deterministic-reference.json"
+      - ".github/workflows/harness-policy.yml"
+      - ".github/actions/setup-ci/**"
+      - ".github/actions/setup-rusty-v8/**"
+  push:
+    branches: ["feat/harness-policy-v1*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-policy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Rust formatting, policy replay and Python guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: rustfmt
+      - name: Run formatting and model-free guard checks
+        run: python3 scripts/harness_ci.py --phase checks --report-dir "$RUNNER_TEMP/harness-checks"
+
+  native-sandbox:
+    name: Native CLI, focused Rust tests, schema and offline sandbox
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUST_MIN_STACK: "8388608"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Make room for the native CLI and codex-core tests
+        run: |
+          set -euo pipefail
+          # These are unused SDKs on this disposable GitHub-hosted runner.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/setup-ci
+      - name: Install native Linux build and sandbox dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config clang cmake libssl-dev libcap-dev libasound2-dev bubblewrap
+          # setup-ci enables unprivileged user namespaces on the hosted runner.
+          # A failure here must stop the gate before any acceptance subprocess.
+          bwrap --unshare-all --die-with-parent --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: clippy
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: harness-cargo-${{ runner.os }}-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml') }}
+      - name: Configure checksummed prebuilt V8 inputs
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-unknown-linux-gnu
+      - name: Fetch the pinned Jev Git objects before the offline gate
+        run: python3 scripts/harness_ci.py --phase prepare-reference --reference "$RUNNER_TEMP/jev-reference" --report-dir "$RUNNER_TEMP/harness-evidence"
+      - name: Build native CLI and run focused Rust, Clippy and schema checks
+        run: |
+          set -euo pipefail
+          python3 scripts/harness_ci.py --phase native --report-dir "$RUNNER_TEMP/harness-evidence" 2>&1 | tee "$RUNNER_TEMP/harness-evidence/native.log"
+      - name: Run native handoff and Jev acceptance with networking disabled
+        run: |
+          set -euo pipefail
+          python3 scripts/harness_ci.py --phase acceptance \
+            --codex "$CARGO_TARGET_DIR/debug/codex" \
+            --reference "$RUNNER_TEMP/jev-reference" \
+            --report-dir "$RUNNER_TEMP/harness-evidence" 2>&1 | tee "$RUNNER_TEMP/harness-evidence/acceptance.log"
+      - name: Verify generated sources and tracked files are unchanged
+        run: git diff --exit-code
+      - name: Upload actual native and sandbox evidence
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: harness-policy-${{ github.sha }}
+          path: ${{ runner.temp }}/harness-evidence/
+          if-no-files-found: warn
+          retention-days: 14

@@ -50,15 +50,22 @@ impl HandoffCli {
 }
 
 fn repository_head(cwd: &Path) -> Option<String> {
-    let output = Command::new("git").args(["rev-parse", "--verify", "HEAD"])
-        .current_dir(cwd).output().ok()?;
-    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 fn repository_dirty(cwd: &Path) -> anyhow::Result<bool> {
     let output = Command::new("git")
         .args(["status", "--porcelain", "--untracked-files=normal"])
-        .current_dir(cwd).output()?;
+        .current_dir(cwd)
+        .output()?;
     if !output.status.success() {
         anyhow::bail!("could not inspect repository state");
     }
@@ -66,12 +73,20 @@ fn repository_dirty(cwd: &Path) -> anyhow::Result<bool> {
 }
 
 fn relative_to(cwd: &Path, path: &Path) -> PathBuf {
-    if path.is_absolute() { path.to_owned() } else { cwd.join(path) }
+    if path.is_absolute() {
+        path.to_owned()
+    } else {
+        cwd.join(path)
+    }
 }
 
 pub(crate) fn prepare(cli: HandoffCli, root: &SharedCliOptions) -> anyhow::Result<Option<ExecCli>> {
     match cli.action {
-        HandoffAction::Save { notes, output, source_session } => {
+        HandoffAction::Save {
+            notes,
+            output,
+            source_session,
+        } => {
             let cwd = root.cwd.clone().unwrap_or(std::env::current_dir()?);
             let repository_head = repository_head(&cwd);
             let repository_dirty = if repository_head.is_some() {
@@ -80,42 +95,60 @@ pub(crate) fn prepare(cli: HandoffCli, root: &SharedCliOptions) -> anyhow::Resul
                 None
             };
             let output = relative_to(&cwd, &output);
-            handoff::save(&output, handoff::HandoffPayload {
-                notes: handoff::read_notes(&relative_to(&cwd, &notes))?,
-                source_session,
-                repository_head,
-                repository_dirty,
-            })?;
+            handoff::save(
+                &output,
+                handoff::HandoffPayload {
+                    notes: handoff::read_notes(&relative_to(&cwd, &notes))?,
+                    source_session,
+                    repository_head,
+                    repository_dirty,
+                },
+            )?;
             println!("{}", serde_json::json!({"status":"saved", "path":output}));
             Ok(None)
         }
         HandoffAction::Inspect { packet } => {
             let cwd = root.cwd.clone().unwrap_or(std::env::current_dir()?);
             let payload = handoff::load(&relative_to(&cwd, &packet))?;
-            println!("{}", serde_json::json!({
-                "status":"valid", "version":1,
-                "source_session":payload.source_session,
-                "repository_head":payload.repository_head,
-                "repository_dirty":payload.repository_dirty,
-                "completed_count":payload.notes.completed.len(),
-                "pending_count":payload.notes.pending.len(),
-                "verification_count":payload.notes.verification.len()
-            }));
+            println!(
+                "{}",
+                serde_json::json!({
+                    "status":"valid", "version":1,
+                    "source_session":payload.source_session,
+                    "repository_head":payload.repository_head,
+                    "repository_dirty":payload.repository_dirty,
+                    "completed_count":payload.notes.completed.len(),
+                    "pending_count":payload.notes.pending.len(),
+                    "verification_count":payload.notes.verification.len()
+                })
+            );
             Ok(None)
         }
-        HandoffAction::Continue { packet, allow_repository_change, mut exec } => {
+        HandoffAction::Continue {
+            packet,
+            allow_repository_change,
+            mut exec,
+        } => {
             if exec.command.is_some() {
-                anyhow::bail!("handoff continue starts a fresh session; resume, fork and review subcommands are not supported");
+                anyhow::bail!(
+                    "handoff continue starts a fresh session; resume, fork and review subcommands are not supported"
+                );
             }
             exec.shared.inherit_exec_root_options(root);
             let cwd = exec.shared.cwd.clone().unwrap_or(std::env::current_dir()?);
             let payload = handoff::load(&relative_to(&cwd, &packet))?;
-            if !allow_repository_change && payload.repository_head.is_some()
+            if !allow_repository_change
+                && payload.repository_head.is_some()
                 && payload.repository_head != repository_head(&cwd)
             {
-                anyhow::bail!("repository HEAD differs from the handoff; inspect the workspace or explicitly use --allow-repository-change");
+                anyhow::bail!(
+                    "repository HEAD differs from the handoff; inspect the workspace or explicitly use --allow-repository-change"
+                );
             }
-            exec.prompt = Some(handoff::continuation_prompt(&payload, exec.prompt.as_deref())?);
+            exec.prompt = Some(handoff::continuation_prompt(
+                &payload,
+                exec.prompt.as_deref(),
+            )?);
             Ok(Some(exec))
         }
     }
