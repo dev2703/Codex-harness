@@ -115,6 +115,40 @@ class TeamLauncherTests(unittest.TestCase):
             self.assertEqual(content["model"], f"custom-{role}")
             self.assertEqual(content["model_reasoning_effort"], "low")
 
+    def test_informational_task_keeps_the_team_workflow(self):
+        plan = self.preview(
+            "--engineer-effort", "low", "--prompt", "how does a knowledge graph work"
+        )
+        self.assertIn("how does a knowledge graph work", plan["prompt"])
+        self.assertIn(
+            "roles for both implementation and informational tasks",
+            plan["root_briefing"],
+        )
+        overrides = self.config_overrides(plan["argv"])
+        engineer = tomllib.loads(
+            plan["role_files"][overrides["agents.engineer.config_file"]]
+        )
+        self.assertEqual(engineer["model_reasoning_effort"], "low")
+        for role in DEFAULTS:
+            self.assertIn(f"agents.{role}.config_file", overrides)
+
+    def test_startup_status_leaves_stdout_machine_readable(self):
+        result = self.run_launcher(
+            "--codex", self.fake_codex(), "--engineer-effort", "low"
+        )
+        json.loads(result.stdout)
+        self.assertIn("Team roles configured:", result.stderr)
+        for selection in (
+            "architect=gpt-6.1-sol/ultra",
+            "engineer=gpt-6-sol/low",
+            "gatekeeper=gpt-6-luna/low",
+            "skeptic=gpt-6-astra/high",
+        ):
+            self.assertIn(selection, result.stderr)
+        preview = self.run_launcher("--dry-run")
+        self.assertEqual(preview.stderr, "")
+        json.loads(preview.stdout)
+
     def test_durable_paths_depend_on_role_settings_and_not_task_text(self):
         first = self.preview("--prompt", "First task")
         second = self.preview("--prompt", "Second task")

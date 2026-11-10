@@ -4,12 +4,17 @@ Run `python3 scripts/harness_team.py` to start an engineering team using native
 Codex custom roles. Python 3.10+ and a Codex executable supporting custom roles
 are required. Use `--codex` to select the binary built from this repository.
 
+Run the launcher directly at a terminal shell prompt. Starting ordinary `codex`
+does not enable this team; the model and effort flags below belong to the Python
+launcher. A launch prints `Team roles configured:` and the four model/effort
+pairs to stderr before opening Codex. `--dry-run` remains JSON-only.
+
 | Role                       | Default model | Default effort | Assignment                                                                                          |
 | -------------------------- | ------------- | -------------- | --------------------------------------------------------------------------------------------------- |
 | Lead architect and arbiter | `gpt-6.1-sol` | `ultra`        | Creates task contracts, reviews architectural invariants, settles disagreements and merge conflicts |
-| Autonomous engineer        | `gpt-6-sol`   | `medium`       | Writes production code, modifies modules, runs shell commands and checks                            |
-| Gatekeeper                 | `gpt-6-luna`  | `low`          | Reviews tool parameters and paths, runs relevant cheap linters                                      |
-| Adversarial skeptic        | `gpt-6-astra` | `high`         | Attacks diffs, fuzzes boundary cases, searches for races                                            |
+| Autonomous engineer        | `gpt-6-sol`   | `medium`       | Implements code or drafts informational answers                                                     |
+| Gatekeeper                 | `gpt-6-luna`  | `low`          | Reviews tool parameters and paths, runs cheap checks, checks answer consistency                     |
+| Adversarial skeptic        | `gpt-6-astra` | `high`         | Attacks diffs, boundary cases, races, and unsupported claims                                        |
 
 Every model and effort has a CLI flag. These defaults are a starting preset;
 model availability and supported effort depend on the selected native client,
@@ -43,6 +48,19 @@ Model identifiers receive syntax validation in the launcher. Catalog and backend
 checks follow the native client's configuration, including its optional
 `strict_role_model_validation` feature.
 
+Informational questions use the team too. For example:
+
+```sh
+python3 scripts/harness_team.py \
+  --engineer-effort low \
+  --prompt "how does a knowledge graph work"
+```
+
+The engineer drafts an explanation, the gatekeeper checks consistency, the
+skeptic challenges assumptions, and the architect combines their findings. A
+conceptual question does not require shell commands. Native agent activity
+appears while the work runs.
+
 Use `--cwd /path/to/project` to target another project. Without `--prompt`, the
 interactive lead acknowledges its configuration and waits for a task. For a
 non-interactive task:
@@ -72,7 +90,8 @@ evidence. For implementation tasks it requests gatekeeper preflight review,
 engineer implementation, skeptic review, and architect arbitration. This
 workflow is a model instruction, subject to higher-priority session policy;
 the launcher does not implement a deterministic scheduler or intercept every
-tool call. Informational tasks can stay with the lead.
+tool call. Informational tasks request the same three roles with answer-focused
+assignments. With no task supplied, the lead waits without spawning agents.
 
 The lead is the root session; `engineer`, `gatekeeper`, and `skeptic` are custom
 agent types. The initial user prompt carries the lead workflow, preserving root
@@ -102,9 +121,27 @@ python3 -B -m unittest discover -s scripts -p 'test_harness_team.py' -v
 ```
 
 Tests exercise argument routing, TOML round trips, invalid inputs, publication,
-concurrent launches, and child process execution using a local fixture. Native
-`--help` smoke checks verify both command forms parse. Live model delegation,
-review effectiveness, and latency have not been measured.
+concurrent launches, startup output separation, and child process execution using
+a local fixture. Native `--help` smoke checks verify both command forms parse.
+
+A live check on 2026-11-11 used installed `codex-cli 0.165.0` with the question
+above in the interactive TUI, a temporary project, and the native read-only
+sandbox. Session records confirmed these model/effort settings and three
+completed child sessions:
+
+| Session    | Model         | Effort  |
+| ---------- | ------------- | ------- |
+| Architect  | `gpt-6.1-sol` | `ultra` |
+| Engineer   | `gpt-6-sol`   | `low`   |
+| Gatekeeper | `gpt-6-luna`  | `low`   |
+| Skeptic    | `gpt-6-astra` | `high`  |
+
+The architect produced the final explanation, the native CLI exited zero, and
+the fixture project stayed empty. The parent session ID is
+`01a1c77d-99f2-7bd0-af80-65c2a4e7f219`. An additional non-interactive marker test
+verified all three roles with the default engineer effort. These are smoke tests
+of routing and completion; review effectiveness and latency targets remain
+unmeasured.
 
 The role mechanism follows the official
 [custom agent documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents).

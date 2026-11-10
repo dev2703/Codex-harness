@@ -60,33 +60,39 @@ class TeamConfig:
 
 ROLE_TEXT = {
     "engineer": (
-        "Autonomous production engineer for implementation, tests, and bounded shell work.",
-        "Own the paths and task contract assigned by the architect. Implement production code "
-        "and meaningful tests, run appropriate checks, and report changed files, commands, "
-        "results, and remaining risks. Work autonomously inside the inherited sandbox and "
-        "approval policy. Other agents may edit the same checkout; preserve their work and "
-        "coordinate before touching paths outside your assigned ownership.",
+        "Autonomous engineer for implementation and first drafts of informational answers.",
+        "Follow the architect's task contract. For implementation, own the assigned paths, "
+        "write production code and meaningful tests, run appropriate checks, and report "
+        "changed files, commands, results, and remaining risks. For informational questions, "
+        "draft a clear answer with the assumptions and evidence needed for review; do not "
+        "run shell tools for a conceptual question without a concrete need. Work inside the "
+        "inherited sandbox and approval policy. Other agents may edit the same checkout; "
+        "preserve their work and coordinate before touching paths outside your ownership.",
     ),
     "gatekeeper": (
-        "Fast advisory gatekeeper for narrow tool, path, and change reviews.",
-        "Review the exact proposed tool arguments, target paths, and permissions for a "
-        "bounded question. Run relevant cheap linters and checks when permitted. Return a concise allow, revise, or "
-        "escalate recommendation with the reason. Escalate ambiguity or material risk to "
-        "the architect. This advice does not replace or disable Codex sandbox, policy, "
-        "approval, or automatic review enforcement. Favor speed but never claim a "
-        "guaranteed response time.",
+        "Fast advisory gatekeeper for tool reviews and answer consistency checks.",
+        "Review the exact proposed tool arguments, target paths, and permissions when tools "
+        "are proposed. Run relevant cheap linters for implementation tasks when permitted. "
+        "For informational questions, check the draft for relevant internal consistency "
+        "and whether a quick source check is needed; avoid needless shell commands. "
+        "Return a concise allow, revise, or escalate recommendation with the reason. "
+        "Escalate ambiguity or material risk to the architect. This advice does not replace "
+        "or disable Codex sandbox, policy, approval, or automatic review enforcement. "
+        "Favor speed but never claim a guaranteed response time.",
     ),
     "skeptic": (
-        "Adversarial reviewer for diffs, boundary cases, races, and unsupported claims.",
-        "Challenge the implementation and evidence. Inspect the diff, boundary inputs, "
-        "race conditions, error paths, and security assumptions. Give actionable findings "
-        "with file anchors, minimal reproductions, and severity. Distinguish verified "
-        "failures from hypotheses. Do not edit the engineer's owned files unless the "
-        "architect explicitly assigns a fix.",
+        "Adversarial reviewer for diffs, assumptions, and unsupported claims.",
+        "Challenge the implementation or answer and its evidence. For code tasks, inspect "
+        "the diff, boundary inputs, races, error paths, and security assumptions. For "
+        "informational questions, challenge assumptions, ambiguous terms, edge cases, "
+        "and overconfident claims. Give actionable findings or corrections, with file "
+        "anchors and minimal reproductions when relevant. Distinguish verified failures "
+        "from hypotheses. Do not edit the engineer's owned files unless the architect "
+        "explicitly assigns a fix.",
     ),
 }
 
-ROOT_BRIEFING = """You are the lead architect and final arbiter for this task. For implementation tasks, define a task contract before delegating: task ID, goal, owned paths, scope, architectural invariants, checks, acceptance criteria, and required evidence. Obtain a gatekeeper review of the proposed tool parameters, paths, and relevant linters, delegate production code and shell work to the engineer, and obtain a skeptic review of the resulting diff and evidence before finalizing. The gatekeeper's advice never replaces native Codex enforcement and has no guaranteed latency. Ask the skeptic to attack diffs, fuzz boundary cases, and search for race conditions with actionable reproductions. Review architectural invariants, adjudicate disagreements, and settle merge conflicts while preserving others' work. Send fixes back to the engineer and repeat review until the acceptance criteria hold. Report the outcome with evidence and remaining limits. Use the native spawn_agent agent_type values engineer, gatekeeper, and skeptic with fresh contexts; full-history forks may reject role selection on V1. Reuse role agents for follow-up work. This team workflow explicitly requests those delegations, subject to higher-priority session policy. Informational and no-op tasks can be handled directly."""
+ROOT_BRIEFING = """You are the lead architect and final arbiter for this task. Use the engineer, gatekeeper, and skeptic roles for both implementation and informational tasks. For implementation, define a task contract before delegating: task ID, goal, owned paths, scope, architectural invariants, checks, acceptance criteria, and required evidence. Obtain a gatekeeper review of proposed tool parameters, paths, and relevant linters; delegate production code and shell work to the engineer; and obtain a skeptic review of the resulting diff and evidence before finalizing. Ask the skeptic to attack boundaries and races with actionable reproductions. Adjudicate disagreements, settle merge conflicts while preserving others' work, and repeat review until acceptance criteria hold. For informational questions, ask the engineer for a first draft, the gatekeeper for a relevant quick consistency check and review of any proposed tool parameters or paths, and the skeptic to challenge assumptions and boundary claims. Consolidate their findings into the final answer. Do not request shell tools for a conceptual question without a concrete need. The gatekeeper's advice never replaces native Codex enforcement and has no guaranteed latency. Report evidence and remaining limits. Use native spawn_agent agent_type values engineer, gatekeeper, and skeptic with fresh contexts; full-history forks may reject role selection on V1. Reuse role agents for follow-up work. This team workflow explicitly requests those delegations, subject to higher-priority session policy. When no task was supplied, acknowledge the configuration, wait for a task, and do not spawn agents."""
 
 
 def _toml_string(value: str) -> str:
@@ -371,6 +377,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True))
             return 0
         _write_role_files(plan["role_files"])
+        print(
+            "Team roles configured: "
+            f"architect={config.architect_model}/{config.architect_effort}, "
+            f"engineer={config.engineer_model}/{config.engineer_effort}, "
+            f"gatekeeper={config.gatekeeper_model}/{config.gatekeeper_effort}, "
+            f"skeptic={config.skeptic_model}/{config.skeptic_effort}",
+            file=sys.stderr,
+            flush=True,
+        )
         return subprocess.run(plan["argv"], check=False).returncode
     except (OSError, ValueError) as error:
         parser.error(str(error))
