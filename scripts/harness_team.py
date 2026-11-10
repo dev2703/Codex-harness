@@ -86,7 +86,7 @@ ROLE_TEXT = {
     ),
 }
 
-ROOT_BRIEFING = """You are the lead architect and final arbiter for this task. Define a task contract before delegating: task ID, goal, owned paths, scope, architectural invariants, checks, acceptance criteria, and required evidence. Delegate production code and shell work to the engineer. Ask the gatekeeper for narrow, quick reviews of tool parameters, paths, and relevant linters; its advice never replaces native Codex enforcement and has no guaranteed latency. Ask the skeptic to attack diffs, fuzz boundary cases, and search for race conditions with actionable reproductions. Review architectural invariants, adjudicate disagreements, and settle merge conflicts while preserving others' work. Send fixes back to the engineer and repeat review until the acceptance criteria hold. Report the outcome with evidence and remaining limits. Use the native spawn_agent agent_type values engineer, gatekeeper, and skeptic with fresh contexts; full-history forks may reject role selection. Reuse role agents for follow-up work. Respect the current session's delegation policy and do not spawn agents unless it permits doing so."""
+ROOT_BRIEFING = """You are the lead architect and final arbiter for this task. For implementation tasks, define a task contract before delegating: task ID, goal, owned paths, scope, architectural invariants, checks, acceptance criteria, and required evidence. Obtain a gatekeeper review of the proposed tool parameters, paths, and relevant linters, delegate production code and shell work to the engineer, and obtain a skeptic review of the resulting diff and evidence before finalizing. The gatekeeper's advice never replaces native Codex enforcement and has no guaranteed latency. Ask the skeptic to attack diffs, fuzz boundary cases, and search for race conditions with actionable reproductions. Review architectural invariants, adjudicate disagreements, and settle merge conflicts while preserving others' work. Send fixes back to the engineer and repeat review until the acceptance criteria hold. Report the outcome with evidence and remaining limits. Use the native spawn_agent agent_type values engineer, gatekeeper, and skeptic with fresh contexts; full-history forks may reject role selection on V1. Reuse role agents for follow-up work. This team workflow explicitly requests those delegations, subject to higher-priority session policy. Informational and no-op tasks can be handled directly."""
 
 
 def _toml_string(value: str) -> str:
@@ -241,6 +241,8 @@ def build_plan(config: TeamConfig, *, exec_mode: bool = False) -> dict[str, obje
         "features.multi_agent=true",
         "-c",
         "agents.enabled=true",
+        "-c",
+        "features.multi_agent_v2.disable_native_tools=false",
     ]
     for name in sorted(contents):
         role_path = str(role_dir / f"{name}.toml")
