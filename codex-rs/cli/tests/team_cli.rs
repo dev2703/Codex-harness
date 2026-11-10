@@ -61,10 +61,25 @@ async fn requested_team_command_produces_a_json_preview_without_role_files() -> 
             "--dry-run",
         ])
         .await?;
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let preview: Value = serde_json::from_slice(&output.stdout)?;
-    assert!(preview["prompt"].as_str().expect("prompt string").ends_with("your task"));
-    assert_eq!(preview["role_files"].as_object().expect("role mapping").len(), 3);
+    assert!(
+        preview["prompt"]
+            .as_str()
+            .expect("prompt string")
+            .ends_with("your task")
+    );
+    assert_eq!(
+        preview["role_files"]
+            .as_object()
+            .expect("role mapping")
+            .len(),
+        3
+    );
     assert!(!fixture.state.exists());
     assert!(
         !String::from_utf8_lossy(&output.stderr).contains("Team roles configured:"),
@@ -91,13 +106,25 @@ async fn exec_preview_preserves_codex_flags_and_literal_task_text() -> Result<()
             task,
         ])
         .await?;
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let preview: Value = serde_json::from_slice(&output.stdout)?;
     let argv = preview["argv"].as_array().expect("argument array");
     for expected in ["exec", "--json", "--skip-git-repo-check"] {
-        assert!(argv.iter().any(|arg| arg.as_str() == Some(expected)), "missing {expected}");
+        assert!(
+            argv.iter().any(|arg| arg.as_str() == Some(expected)),
+            "missing {expected}"
+        );
     }
-    assert!(preview["prompt"].as_str().expect("prompt string").ends_with(task));
+    assert!(
+        preview["prompt"]
+            .as_str()
+            .expect("prompt string")
+            .ends_with(task)
+    );
     assert!(!fixture.project.join("never-created").exists());
     assert!(!fixture.project.join(".codex-harness").exists());
     Ok(())
@@ -109,7 +136,13 @@ async fn invalid_and_remote_team_commands_fail_before_publication() -> Result<()
     for args in [
         vec!["team", "--architect-effort", "unsupported"],
         vec!["team", "--architect-model", "invalid model"],
-        vec!["--remote", "ws://127.0.0.1:1", "team", "--prompt", "Inspect"],
+        vec![
+            "--remote",
+            "ws://127.0.0.1:1",
+            "team",
+            "--prompt",
+            "Inspect",
+        ],
     ] {
         let output = fixture.run(&args).await?;
         assert!(!output.status.success(), "unexpected success for {args:?}");

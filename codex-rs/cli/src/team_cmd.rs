@@ -14,7 +14,15 @@ use std::path::Path;
 use std::path::PathBuf;
 
 const EFFORTS: [&str; 9] = [
-    "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent",
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra",
+    "persistent",
 ];
 
 #[derive(Debug, Parser)]
@@ -149,9 +157,14 @@ impl TeamCli {
             .map(expand_home)
             .transpose()?
             .unwrap_or(std::env::current_dir()?);
-        let cwd = cwd.canonicalize().context("could not resolve team working directory")?;
+        let cwd = cwd
+            .canonicalize()
+            .context("could not resolve team working directory")?;
         if !cwd.is_dir() {
-            anyhow::bail!("team working directory is not a directory: {}", cwd.display());
+            anyhow::bail!(
+                "team working directory is not a directory: {}",
+                cwd.display()
+            );
         }
         let state_dir = self
             .state_dir
@@ -165,34 +178,66 @@ impl TeamCli {
             cwd.join(state_dir)
         };
         let roles = [
-            ("engineer", self.engineer_model.as_str(), self.engineer_effort.as_str(), ENGINEER_DESCRIPTION, ENGINEER_INSTRUCTIONS),
-            ("gatekeeper", self.gatekeeper_model.as_str(), self.gatekeeper_effort.as_str(), GATEKEEPER_DESCRIPTION, GATEKEEPER_INSTRUCTIONS),
-            ("skeptic", self.skeptic_model.as_str(), self.skeptic_effort.as_str(), SKEPTIC_DESCRIPTION, SKEPTIC_INSTRUCTIONS),
+            (
+                "engineer",
+                self.engineer_model.as_str(),
+                self.engineer_effort.as_str(),
+                ENGINEER_DESCRIPTION,
+                ENGINEER_INSTRUCTIONS,
+            ),
+            (
+                "gatekeeper",
+                self.gatekeeper_model.as_str(),
+                self.gatekeeper_effort.as_str(),
+                GATEKEEPER_DESCRIPTION,
+                GATEKEEPER_INSTRUCTIONS,
+            ),
+            (
+                "skeptic",
+                self.skeptic_model.as_str(),
+                self.skeptic_effort.as_str(),
+                SKEPTIC_DESCRIPTION,
+                SKEPTIC_INSTRUCTIONS,
+            ),
         ];
         let mut contents = BTreeMap::new();
         for (name, model, effort, description, instructions) in roles {
-            contents.insert(name, role_text(name, description, instructions, model, effort)?);
+            contents.insert(
+                name,
+                role_text(name, description, instructions, model, effort)?,
+            );
         }
         let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&contents)?));
         let role_dir = state_dir.join(&digest[..20]);
         let mut role_files = BTreeMap::new();
         let mut generated = vec![
-            format!("model_reasoning_effort={}", toml_string(&self.architect_effort)?),
+            format!(
+                "model_reasoning_effort={}",
+                toml_string(&self.architect_effort)?
+            ),
             "features.multi_agent=true".to_string(),
             "agents.enabled=true".to_string(),
             "features.multi_agent_v2.disable_native_tools=false".to_string(),
         ];
         for (name, _, _, description, _) in roles {
             let path = role_dir.join(format!("{name}.toml"));
-            generated.push(format!("agents.{name}.description={}", toml_string(description)?));
-            generated.push(format!("agents.{name}.config_file={}", toml_string(&path.to_string_lossy())?));
+            generated.push(format!(
+                "agents.{name}.description={}",
+                toml_string(description)?
+            ));
+            generated.push(format!(
+                "agents.{name}.config_file={}",
+                toml_string(&path.to_string_lossy())?
+            ));
             role_files.insert(path, contents.remove(name).context("missing team role")?);
         }
         root.shared.cwd = Some(cwd);
         root.shared.model = Some(architect_model.clone());
         let prompt = match root.prompt.take() {
             Some(task) => format!("{ROOT_BRIEFING}\n\nUser task:\n{task}"),
-            None => format!("{ROOT_BRIEFING}\n\nNo task supplied yet. Acknowledge the team configuration and wait for the user's task."),
+            None => format!(
+                "{ROOT_BRIEFING}\n\nNo task supplied yet. Acknowledge the team configuration and wait for the user's task."
+            ),
         };
         root.prompt = Some(prompt.clone());
         root.config_overrides.raw_overrides.extend(generated);
@@ -219,43 +264,100 @@ impl TeamCli {
             exec.last_message_file = self.output_last_message;
             if let Some(approval) = root.approval_policy {
                 let value = approval_name(approval);
-                exec.config_overrides.raw_overrides.push(format!("approval_policy={}", toml_string(value)?));
-                argv.extend(["-c".to_string(), format!("approval_policy={}", toml_string(value)?)]);
+                exec.config_overrides
+                    .raw_overrides
+                    .push(format!("approval_policy={}", toml_string(value)?));
+                argv.extend([
+                    "-c".to_string(),
+                    format!("approval_policy={}", toml_string(value)?),
+                ]);
             }
             if root.web_search {
-                exec.config_overrides.raw_overrides.push("web_search=\"live\"".to_string());
+                exec.config_overrides
+                    .raw_overrides
+                    .push("web_search=\"live\"".to_string());
                 argv.extend(["-c".to_string(), "web_search=\"live\"".to_string()]);
             }
-            for (enabled, flag) in [(self.json, "--json"), (self.ephemeral, "--ephemeral"), (self.skip_git_repo_check, "--skip-git-repo-check")] {
-                if enabled { argv.push(flag.to_string()); }
+            for (enabled, flag) in [
+                (self.json, "--json"),
+                (self.ephemeral, "--ephemeral"),
+                (self.skip_git_repo_check, "--skip-git-repo-check"),
+            ] {
+                if enabled {
+                    argv.push(flag.to_string());
+                }
             }
-            for (path, flag) in [(&exec.output_schema, "--output-schema"), (&exec.last_message_file, "--output-last-message")] {
-                if let Some(path) = path { argv.extend([flag.to_string(), path.to_string_lossy().into_owned()]); }
+            for (path, flag) in [
+                (&exec.output_schema, "--output-schema"),
+                (&exec.last_message_file, "--output-last-message"),
+            ] {
+                if let Some(path) = path {
+                    argv.extend([flag.to_string(), path.to_string_lossy().into_owned()]);
+                }
             }
             TeamSession::Exec(exec)
         } else {
-            if let Some(approval) = root.approval_policy { argv.extend(["--ask-for-approval".to_string(), approval_name(approval).to_string()]); }
-            for (enabled, flag) in [(root.web_search, "--search"), (root.no_alt_screen, "--no-alt-screen"), (root.no_daemon, "--no-daemon")] {
-                if enabled { argv.push(flag.to_string()); }
+            if let Some(approval) = root.approval_policy {
+                argv.extend([
+                    "--ask-for-approval".to_string(),
+                    approval_name(approval).to_string(),
+                ]);
+            }
+            for (enabled, flag) in [
+                (root.web_search, "--search"),
+                (root.no_alt_screen, "--no-alt-screen"),
+                (root.no_daemon, "--no-daemon"),
+            ] {
+                if enabled {
+                    argv.push(flag.to_string());
+                }
             }
             TeamSession::Interactive(root)
         };
         argv.extend(["--".to_string(), prompt.clone()]);
-        let status = format!("Team roles configured: architect={architect_model}/{}, engineer={}/{}, gatekeeper={}/{}, skeptic={}/{}", self.architect_effort, self.engineer_model, self.engineer_effort, self.gatekeeper_model, self.gatekeeper_effort, self.skeptic_model, self.skeptic_effort);
-        Ok(TeamLaunch { session, dry_run: self.dry_run, plan: TeamPlan { argv, role_files, root_briefing: ROOT_BRIEFING, prompt, status } })
+        let status = format!(
+            "Team roles configured: architect={architect_model}/{}, engineer={}/{}, gatekeeper={}/{}, skeptic={}/{}",
+            self.architect_effort,
+            self.engineer_model,
+            self.engineer_effort,
+            self.gatekeeper_model,
+            self.gatekeeper_effort,
+            self.skeptic_model,
+            self.skeptic_effort
+        );
+        Ok(TeamLaunch {
+            session,
+            dry_run: self.dry_run,
+            plan: TeamPlan {
+                argv,
+                role_files,
+                root_briefing: ROOT_BRIEFING,
+                prompt,
+                status,
+            },
+        })
     }
 }
 
 fn validate_model(model: &str, name: &str) -> anyhow::Result<()> {
-    if model.is_empty() || model.chars().count() > 256 || model.starts_with('-') || model.chars().any(|ch| ch.is_whitespace() || ch.is_control()) {
-        anyhow::bail!("--{name}-model must be a model slug without whitespace or control characters (up to 256 characters)");
+    if model.is_empty()
+        || model.chars().count() > 256
+        || model.starts_with('-')
+        || model
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        anyhow::bail!(
+            "--{name}-model must be a model slug without whitespace or control characters (up to 256 characters)"
+        );
     }
     Ok(())
 }
 
 fn expand_home(path: &Path) -> anyhow::Result<PathBuf> {
     if let Ok(suffix) = path.strip_prefix("~") {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).context("could not resolve home directory")?;
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .context("could not resolve home directory")?;
         Ok(PathBuf::from(home).join(suffix))
     } else {
         Ok(path.to_owned())
@@ -267,34 +369,84 @@ fn toml_string(value: &str) -> anyhow::Result<String> {
     Ok(serde_json::to_string(value)?)
 }
 
-fn role_text(name: &str, description: &str, instructions: &str, model: &str, effort: &str) -> anyhow::Result<String> {
+fn role_text(
+    name: &str,
+    description: &str,
+    instructions: &str,
+    model: &str,
+    effort: &str,
+) -> anyhow::Result<String> {
     let mut text = String::new();
-    for (key, value) in [("name", name), ("description", description), ("developer_instructions", instructions), ("model", model), ("model_reasoning_effort", effort)] {
+    for (key, value) in [
+        ("name", name),
+        ("description", description),
+        ("developer_instructions", instructions),
+        ("model", model),
+        ("model_reasoning_effort", effort),
+    ] {
         text.push_str(&format!("{key} = {}\n", toml_string(value)?));
     }
     Ok(text)
 }
 
 fn approval_name(approval: ApprovalModeCliArg) -> &'static str {
-    match approval { ApprovalModeCliArg::OnRequest => "on-request", ApprovalModeCliArg::Never => "never" }
+    match approval {
+        ApprovalModeCliArg::OnRequest => "on-request",
+        ApprovalModeCliArg::Never => "never",
+    }
 }
 
 fn append_shared_argv(argv: &mut Vec<String>, interactive: &TuiCli) -> anyhow::Result<()> {
     let shared = &interactive.shared;
-    for (flag, value) in [("-C", shared.cwd.as_ref().map(|path| path.to_string_lossy().into_owned())), ("-m", shared.model.clone()), ("--local-provider", shared.oss_provider.clone()), ("--profile", shared.config_profile_v2.as_ref().map(ToString::to_string))] {
-        if let Some(value) = value { argv.extend([flag.to_string(), value]); }
+    for (flag, value) in [
+        (
+            "-C",
+            shared
+                .cwd
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
+        ),
+        ("-m", shared.model.clone()),
+        ("--local-provider", shared.oss_provider.clone()),
+        (
+            "--profile",
+            shared.config_profile_v2.as_ref().map(ToString::to_string),
+        ),
+    ] {
+        if let Some(value) = value {
+            argv.extend([flag.to_string(), value]);
+        }
     }
     if let Some(sandbox) = shared.sandbox_mode {
-        let value = match sandbox { codex_utils_cli::SandboxModeCliArg::ReadOnly => "read-only", codex_utils_cli::SandboxModeCliArg::WorkspaceWrite => "workspace-write", codex_utils_cli::SandboxModeCliArg::DangerFullAccess => "danger-full-access" };
+        let value = match sandbox {
+            codex_utils_cli::SandboxModeCliArg::ReadOnly => "read-only",
+            codex_utils_cli::SandboxModeCliArg::WorkspaceWrite => "workspace-write",
+            codex_utils_cli::SandboxModeCliArg::DangerFullAccess => "danger-full-access",
+        };
         argv.extend(["--sandbox".to_string(), value.to_string()]);
     }
-    for (enabled, flag) in [(shared.oss, "--oss"), (shared.dangerously_bypass_approvals_and_sandbox, "--dangerously-bypass-approvals-and-sandbox"), (shared.bypass_hook_trust, "--dangerously-bypass-hook-trust"), (shared.worktree, "--worktree"), (interactive.strict_config, "--strict-config")] {
-        if enabled { argv.push(flag.to_string()); }
+    for (enabled, flag) in [
+        (shared.oss, "--oss"),
+        (
+            shared.dangerously_bypass_approvals_and_sandbox,
+            "--dangerously-bypass-approvals-and-sandbox",
+        ),
+        (shared.bypass_hook_trust, "--dangerously-bypass-hook-trust"),
+        (shared.worktree, "--worktree"),
+        (interactive.strict_config, "--strict-config"),
+    ] {
+        if enabled {
+            argv.push(flag.to_string());
+        }
     }
     for (paths, flag) in [(&shared.images, "--image"), (&shared.add_dir, "--add-dir")] {
-        for path in paths { argv.extend([flag.to_string(), path.to_string_lossy().into_owned()]); }
+        for path in paths {
+            argv.extend([flag.to_string(), path.to_string_lossy().into_owned()]);
+        }
     }
-    for value in &interactive.config_overrides.raw_overrides { argv.extend(["-c".to_string(), value.clone()]); }
+    for value in &interactive.config_overrides.raw_overrides {
+        argv.extend(["-c".to_string(), value.clone()]);
+    }
     Ok(())
 }
 
@@ -335,7 +487,9 @@ impl TeamPlan {
 fn reject_symlinks(path: &Path, root: &Path) -> anyhow::Result<()> {
     for component in path.ancestors().take_while(|path| *path != root) {
         match std::fs::symlink_metadata(component) {
-            Ok(metadata) if metadata.file_type().is_symlink() => anyhow::bail!("state path contains a symlink: {}", component.display()),
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                anyhow::bail!("state path contains a symlink: {}", component.display())
+            }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
@@ -350,9 +504,12 @@ mod tests;
 
 // Keep the team workflow consistent with scripts/harness_team.py.
 const ROOT_BRIEFING: &str = "You are the lead architect and final arbiter for this task. Use the engineer, gatekeeper, and skeptic roles for both implementation and informational tasks. For implementation, define a task contract before delegating: task ID, goal, owned paths, scope, architectural invariants, checks, acceptance criteria, and required evidence. Obtain a gatekeeper review of proposed tool parameters, paths, and relevant linters; delegate production code and shell work to the engineer; and obtain a skeptic review of the resulting diff and evidence before finalizing. Ask the skeptic to attack boundaries and races with actionable reproductions. Adjudicate disagreements, settle merge conflicts while preserving others' work, and repeat review until acceptance criteria hold. For informational questions, ask the engineer for a first draft, the gatekeeper for a relevant quick consistency check and review of any proposed tool parameters or paths, and the skeptic to challenge assumptions and boundary claims. Consolidate their findings into the final answer. Do not request shell tools for a conceptual question without a concrete need. The gatekeeper's advice never replaces native Codex enforcement and has no guaranteed latency. Report evidence and remaining limits. Use native spawn_agent agent_type values engineer, gatekeeper, and skeptic with fresh contexts; full-history forks may reject role selection on V1. Reuse role agents for follow-up work. This team workflow explicitly requests those delegations, subject to higher-priority session policy. When no task was supplied, acknowledge the configuration, wait for a task, and do not spawn agents.";
-const ENGINEER_DESCRIPTION: &str = "Autonomous engineer for implementation and first drafts of informational answers.";
+const ENGINEER_DESCRIPTION: &str =
+    "Autonomous engineer for implementation and first drafts of informational answers.";
 const ENGINEER_INSTRUCTIONS: &str = "Follow the architect's task contract. For implementation, own the assigned paths, write production code and meaningful tests, run appropriate checks, and report changed files, commands, results, and remaining risks. For informational questions, draft a clear answer with the assumptions and evidence needed for review; do not run shell tools for a conceptual question without a concrete need. Work inside the inherited sandbox and approval policy. Other agents may edit the same checkout; preserve their work and coordinate before touching paths outside your ownership.";
-const GATEKEEPER_DESCRIPTION: &str = "Fast advisory gatekeeper for tool reviews and answer consistency checks.";
+const GATEKEEPER_DESCRIPTION: &str =
+    "Fast advisory gatekeeper for tool reviews and answer consistency checks.";
 const GATEKEEPER_INSTRUCTIONS: &str = "Review the exact proposed tool arguments, target paths, and permissions when tools are proposed. Run relevant cheap linters for implementation tasks when permitted. For informational questions, check the draft for relevant internal consistency and whether a quick source check is needed; avoid needless shell commands. Return a concise allow, revise, or escalate recommendation with the reason. Escalate ambiguity or material risk to the architect. This advice does not replace or disable Codex sandbox, policy, approval, or automatic review enforcement. Favor speed but never claim a guaranteed response time.";
-const SKEPTIC_DESCRIPTION: &str = "Adversarial reviewer for diffs, assumptions, and unsupported claims.";
+const SKEPTIC_DESCRIPTION: &str =
+    "Adversarial reviewer for diffs, assumptions, and unsupported claims.";
 const SKEPTIC_INSTRUCTIONS: &str = "Challenge the implementation or answer and its evidence. For code tasks, inspect the diff, boundary inputs, races, error paths, and security assumptions. For informational questions, challenge assumptions, ambiguous terms, edge cases, and overconfident claims. Give actionable findings or corrections, with file anchors and minimal reproductions when relevant. Distinguish verified failures from hypotheses. Do not edit the engineer's owned files unless the architect explicitly assigns a fix.";

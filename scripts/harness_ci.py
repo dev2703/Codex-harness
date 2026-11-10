@@ -65,6 +65,7 @@ def native() -> None:
     for package, target, test_filter in (
         ("codex-cli", "--lib", "handoff"),
         ("codex-cli", "--bin", "handoff_cmd"),
+        ("codex-cli", "--bin", "team"),
         ("codex-core", "--lib", "tools::failure_policy::tests"),
         ("codex-core", "--lib", "tools::failure_observation::tests"),
         ("codex-core", "--lib", "tools::context::tests"),
@@ -74,6 +75,18 @@ def native() -> None:
         if target == "--bin":
             command.append("codex")
         run([*command, test_filter], cwd=RUST)
+    run(["cargo", "test", "--locked", "-p", "codex-cli", "--test", "team_cli"], cwd=RUST)
+    target_dir = Path(os.environ.get("CARGO_TARGET_DIR", RUST / "target"))
+    if not target_dir.is_absolute():
+        target_dir = RUST / target_dir
+    run(
+        [
+            sys.executable,
+            "scripts/harness_team_smoke.py",
+            "--codex",
+            str(target_dir / "debug" / ("codex.exe" if os.name == "nt" else "codex")),
+        ]
+    )
     run(["cargo", "test", "--locked", "-p", "codex-features", "--lib"], cwd=RUST)
     run(
         [

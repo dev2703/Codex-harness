@@ -78,10 +78,10 @@ mod remote_control_cmd;
 mod sandbox_setup;
 mod sandbox_uninstall;
 mod state_db_recovery;
-mod team_cmd;
 #[cfg(test)]
 #[path = "team_args_tests.rs"]
 mod team_args_tests;
+mod team_cmd;
 #[cfg(not(windows))]
 mod wsl_paths;
 
@@ -2341,7 +2341,7 @@ fn reject_unsupported_worktree_for_subcommand(
     subcommand: &Option<Subcommand>,
 ) -> anyhow::Result<()> {
     let subcommand_worktree = match subcommand {
-        Some(Subcommand::Team(command)) => command.interactive.shared.worktree,
+        Some(Subcommand::Team(command)) => command.worktree_requested(),
         Some(Subcommand::Exec(command)) => command.shared.worktree,
         Some(Subcommand::Handoff(command)) => command.worktree_requested(),
         Some(Subcommand::Resume(command)) => command.config_overrides.0.shared.worktree,

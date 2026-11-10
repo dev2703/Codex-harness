@@ -20,14 +20,12 @@ fn prepare_from_args(args: &[&str]) -> TeamLaunch {
     cli.interactive
         .shared
         .take_auto_review_config_overrides(&mut cli.config_overrides);
-    prepend_config_flags(
-        &mut cli.interactive.config_overrides,
-        cli.config_overrides,
-    );
+    prepend_config_flags(&mut cli.interactive.config_overrides, cli.config_overrides);
     let Some(Subcommand::Team(team)) = cli.subcommand else {
         panic!("expected native team command");
     };
-    team.prepare(cli.interactive).expect("prepare native session")
+    team.prepare(cli.interactive)
+        .expect("prepare native session")
 }
 
 fn effective_override(overrides: &CliConfigOverrides, key: &str) -> Option<toml::Value> {
@@ -94,7 +92,10 @@ fn requested_architect_settings_and_literal_task_reach_the_tui() {
         panic!("expected interactive session");
     };
     assert_eq!(interactive.model.as_deref(), Some("gpt-6.1-sol"));
-    assert_eq!(interactive.prompt.as_deref(), Some(launch.plan.prompt.as_str()));
+    assert_eq!(
+        interactive.prompt.as_deref(),
+        Some(launch.plan.prompt.as_str())
+    );
     assert!(launch.plan.prompt.ends_with(task));
     assert_eq!(
         effective_override(&interactive.config_overrides, "model_reasoning_effort"),
@@ -127,7 +128,10 @@ fn shared_interactive_flags_obey_native_subcommand_precedence() {
         panic!("expected interactive session");
     };
     assert_eq!(
-        interactive.config_profile_v2.as_ref().map(ToString::to_string),
+        interactive
+            .config_profile_v2
+            .as_ref()
+            .map(ToString::to_string),
         Some("child".to_string()),
     );
     assert!(matches!(
@@ -173,14 +177,24 @@ fn exec_preserves_root_options_and_native_output_controls() {
         exec.config_profile_v2.as_ref().map(ToString::to_string),
         Some("root".to_string()),
     );
-    assert!(matches!(exec.sandbox_mode, Some(SandboxModeCliArg::ReadOnly)));
-    assert_eq!(exec.images, [PathBuf::from("root.png"), PathBuf::from("child.png")]);
+    assert!(matches!(
+        exec.sandbox_mode,
+        Some(SandboxModeCliArg::ReadOnly)
+    ));
+    assert_eq!(
+        exec.images,
+        [PathBuf::from("root.png"), PathBuf::from("child.png")]
+    );
     assert!(exec.json);
     assert!(exec.ephemeral);
     assert!(exec.skip_git_repo_check);
     assert_eq!(exec.output_schema, Some(PathBuf::from("schema.json")));
     assert_eq!(exec.last_message_file, Some(PathBuf::from("result.txt")));
-    assert!(exec.prompt.expect("team briefing").ends_with("Report the findings"));
+    assert!(
+        exec.prompt
+            .expect("team briefing")
+            .ends_with("Report the findings")
+    );
 }
 
 #[test]
@@ -216,9 +230,16 @@ fn configuration_overrides_survive_the_team_boundary_in_order() {
         Some(toml::Value::Boolean(true)),
     );
     for (path, _) in launch.plan.role_files {
-        let role = path.file_stem().expect("role filename").to_str().expect("UTF-8");
+        let role = path
+            .file_stem()
+            .expect("role filename")
+            .to_str()
+            .expect("UTF-8");
         assert_eq!(
-            effective_override(&interactive.config_overrides, &format!("agents.{role}.config_file")),
+            effective_override(
+                &interactive.config_overrides,
+                &format!("agents.{role}.config_file")
+            ),
             Some(toml::Value::String(path.to_string_lossy().into_owned())),
         );
     }
@@ -245,11 +266,8 @@ fn root_runtime_policies_allow_team_sessions() {
                 .map(ToString::to_string),
             Some("work".to_string()),
         );
-        reject_root_strict_config_for_subcommand(
-            cli.interactive.strict_config,
-            &cli.subcommand,
-        )
-        .expect("root strict config is supported");
+        reject_root_strict_config_for_subcommand(cli.interactive.strict_config, &cli.subcommand)
+            .expect("root strict config is supported");
         reject_unsupported_worktree_for_subcommand(
             cli.interactive.shared.worktree,
             &cli.subcommand,
@@ -272,11 +290,5 @@ fn root_runtime_policies_allow_team_sessions() {
 fn positional_prompt_is_supported_and_ambiguous_prompts_are_rejected() {
     let launch = prepare_from_args(&["codex", "team", "--dry-run", "Inspect the parser"]);
     assert!(launch.plan.prompt.ends_with("Inspect the parser"));
-    assert!(try_parse_from([
-        "codex",
-        "team",
-        "--prompt",
-        "first task",
-        "second task",
-    ]).is_err());
+    assert!(try_parse_from(["codex", "team", "--prompt", "first task", "second task",]).is_err());
 }

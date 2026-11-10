@@ -1,12 +1,33 @@
 # Configurable engineering team
 
-Run `python3 scripts/harness_team.py` to start an engineering team using native
-Codex custom roles. Python 3.10+ and a Codex executable supporting custom roles
-are required. Use `--codex` to select the binary built from this repository.
+Run `codex team` to start an engineering team using native Codex custom roles:
+
+```sh
+codex team \
+  --architect-model gpt-6.1-sol \
+  --architect-effort ultra \
+  --prompt "your task"
+```
+
+The `team` subcommand is implemented in this repository's native CLI. Build it
+before using the new command; an existing installed release does not acquire
+the command from changes to this checkout:
+
+```sh
+cd codex-rs
+cargo build --locked -p codex-cli --bin codex
+./target/debug/codex team --help
+./target/debug/codex team --prompt "your task"
+```
+
+If `CARGO_TARGET_DIR` is set, use the binary in that directory instead. Native
+`codex team` does not require Python. The original
+`python3 scripts/harness_team.py` interface remains available with Python 3.10+
+and a Codex executable supporting custom roles; `--codex` selects that executable.
 
 Run the launcher directly at a terminal shell prompt. Starting ordinary `codex`
-does not enable this team; the model and effort flags below belong to the Python
-launcher. A launch prints `Team roles configured:` and the four model/effort
+does not enable this team; use the `team` subcommand. A launch prints
+`Team roles configured:` and the four model/effort
 pairs to stderr before opening Codex. `--dry-run` remains JSON-only.
 
 | Role                       | Default model | Default effort | Assignment                                                                                          |
@@ -24,21 +45,20 @@ Preview the command and complete role files without creating files or launching
 Codex:
 
 ```sh
-python3 scripts/harness_team.py --dry-run \
+codex team --dry-run \
   --prompt "Implement the next task in this repository"
 ```
 
 Launch with explicit assignments and the normal native sandbox flag:
 
 ```sh
-python3 scripts/harness_team.py \
-  --codex ./codex-rs/target/debug/codex \
+codex team \
   --architect-model gpt-6.1-sol --architect-effort ultra \
   --engineer-model gpt-6-sol --engineer-effort medium \
   --gatekeeper-model gpt-6-luna --gatekeeper-effort low \
   --skeptic-model gpt-6-astra --skeptic-effort high \
   --prompt "Implement the next task in this repository" \
-  -- --sandbox workspace-write
+  --sandbox workspace-write
 ```
 
 Use `--engineer-effort low` for the lighter engineer configuration. Other
@@ -51,7 +71,7 @@ checks follow the native client's configuration, including its optional
 Informational questions use the team too. For example:
 
 ```sh
-python3 scripts/harness_team.py \
+codex team \
   --engineer-effort low \
   --prompt "how does a knowledge graph work"
 ```
@@ -66,12 +86,33 @@ interactive lead acknowledges its configuration and waits for a task. For a
 non-interactive task:
 
 ```sh
-python3 scripts/harness_team.py --exec \
+codex team --exec \
   --prompt "Fix the failing parser test and verify the change" \
-  -- --sandbox workspace-write --json
+  --sandbox workspace-write --json
 ```
 
-Arguments following `--` are forwarded as individual process arguments. Supported
+Native `codex team` accepts normal interactive Codex flags directly, including
+`--sandbox`/`-s`, `--profile`/`-p`, `--image`/`-i`, `--add-dir`, `--worktree`,
+`--ask-for-approval`/`-a`, and `--strict-config`. Both `--sandbox=read-only` and
+`--sandbox read-only` work. Use `--cd`/`-C` or its `--cwd` alias to choose the
+project. A positional task is also accepted: `codex team "your task"`.
+`--model`/`-m` selects the architect and conflicts with an explicit
+`--architect-model`. Role settings take precedence over generic `-c` routing
+overrides. Root-level runtime flags work before `team` too; flags after `team`
+take precedence. Profiles, authentication, provider settings, sandbox and
+approval controls follow the existing native runtime.
+
+With `--exec`, native team supports `--json`, `--ephemeral`,
+`--skip-git-repo-check`, `--color`, `--output-schema`, and
+`--output-last-message`/`-o`. Approval and search settings carry into exec as
+configuration overrides. `--no-alt-screen` and `--no-daemon` require interactive
+mode. Remote servers are rejected before role files are created because the
+generated role paths refer to the local filesystem. Native `resume`, `fork`,
+`review`, and other Codex commands continue to use their existing entry points;
+they are not nested under `team`.
+
+For the original Python launcher, arguments following `--` are forwarded as
+individual process arguments. Supported
 shared flags are `--sandbox`, `--profile`, `--add-dir`, `--image`,
 `--local-provider`, `--oss`, `--approve-for-me`,
 `--dangerously-bypass-approvals-and-sandbox`, `--strict-config`, and `--help`.
@@ -110,9 +151,10 @@ Role files are created before starting Codex, under
 choose another persistent location. Role paths are absolute, files are published
 atomically, and matching configurations reuse their files. Conflicting contents
 and symlinks below the selected state root fail without overwriting the target.
-Keep these files for sessions that reference them. The launcher leaves
-`CODEX_HOME` and existing config files untouched, and uses an argument array
-without a shell. Native subprocess exit codes are returned to the caller.
+Keep these files for sessions that reference them. Both interfaces leave
+`CODEX_HOME` and existing config files untouched. The native subcommand calls
+the normal interactive or exec runtime in process. The Python launcher uses an
+argument array without a shell and returns native subprocess exit codes.
 
 Offline verification:
 
@@ -123,6 +165,23 @@ python3 -B -m unittest discover -s scripts -p 'test_harness_team.py' -v
 Tests exercise argument routing, TOML round trips, invalid inputs, publication,
 concurrent launches, startup output separation, and child process execution using
 a local fixture. Native `--help` smoke checks verify both command forms parse.
+
+Run the native team unit and CLI integration tests from `codex-rs`:
+
+```sh
+cargo test --locked -p codex-cli --bin codex team
+cargo test --locked -p codex-cli --test team_cli
+```
+
+The native tests cover normal Codex flag parsing and precedence, help and shell
+completion discovery, interactive and exec configuration, atomic publication,
+concurrent launches, invalid inputs, and remote rejection. Process tests use
+`--dry-run` and make no model requests. A separate process smoke check is also
+available (Python 3.11+):
+
+```sh
+python3 scripts/harness_team_smoke.py --codex ./codex-rs/target/debug/codex
+```
 
 A live check on 2026-11-11 used installed `codex-cli 0.165.0` with the question
 above in the interactive TUI, a temporary project, and the native read-only
