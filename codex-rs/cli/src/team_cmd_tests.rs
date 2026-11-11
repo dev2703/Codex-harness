@@ -235,3 +235,97 @@ fn relative_state_directory_is_resolved_against_session_cwd() {
     );
     assert!(!expected.exists());
 }
+
+#[test]
+fn task_files_preserve_literal_text_in_both_modes() {
+    let root = tempfile::tempdir().expect("temporary workspace");
+    let path = root.path().join("task with spaces.txt");
+    let task = "Inspect $(touch never-created) and `printf surprise`\r\n--config=payload\n";
+    std::fs::write(&path, task).expect("write task file");
+    for mode in [vec![], vec!["--exec"]] {
+        let mut args = vec![
+            "--dry-run",
+            "--prompt-file",
+            path.to_str().expect("UTF-8 path"),
+        ];
+        args.extend(mode);
+        let launch = prepare_at(root.path(), &args);
+        assert!(launch.plan.prompt.ends_with(task));
+        assert!(!launch.plan.prompt.contains("No task supplied yet"));
+        assert!(!root.path().join(".codex-harness").exists());
+        assert!(!root.path().join("never-created").exists());
+    }
+}
+
+#[test]
+fn stdin_tasks_are_resolved_before_the_team_briefing() {
+    let root = tempfile::tempdir().expect("temporary workspace");
+    let task = "Inspect literal $HOME and `touch never-created`\n";
+    for args in [
+        vec!["--exec"],
+        vec!["--exec", "-"],
+        vec!["--prompt", "-"],
+        vec!["--exec", "--prompt-file", "-"],
+        vec!["--prompt-file", "-"],
+    ] {
+        let command = TeamCli::try_parse_from(["team", "--dry-run"].into_iter().chain(args))
+            .expect("stdin task options");
+        let mut root_cli = TuiCli::try_parse_from(["codex"]).expect("root options");
+        root_cli.shared.cwd = Some(root.path().to_owned());
+        let launch = command
+            .prepare_with_input(root_cli, &mut task.as_bytes(), false)
+            .expect("read piped task");
+        assert!(launch.plan.prompt.ends_with(task));
+        assert!(!launch.plan.prompt.contains("No task supplied yet"));
+        assert!(!root.path().join(".codex-harness").exists());
+    }
+}
+
+#[test]
+fn missing_invalid_and_blank_task_sources_fail_before_publication() {
+    let root = tempfile::tempdir().expect("temporary workspace");
+    let path = root.path().join("task.txt");
+    assert!(read_task(Some(&path), None, false, &mut &b""[..], false).is_err());
+    for bytes in [&b" \r\n\t"[..], &b"\xff"[..]] {
+        std::fs::write(&path, bytes).expect("write invalid task");
+        let command =
+            TeamCli::try_parse_from(["team", "--prompt-file", path.to_str().expect("UTF-8 path")])
+                .expect("task file flag");
+        let mut root_cli = TuiCli::try_parse_from(["codex"]).expect("root options");
+        root_cli.shared.cwd = Some(root.path().to_owned());
+        assert!(command.prepare(root_cli).is_err());
+        assert!(!root.path().join(".codex-harness").exists());
+        assert!(read_task(None, None, true, &mut &bytes[..], false).is_err());
+    }
+    for prompt in [None, Some("-".to_string())] {
+        assert!(read_task(None, prompt, true, &mut &b"task"[..], true).is_err());
+    }
+    assert!(read_task(None, Some(" ".into()), false, &mut &b""[..], false).is_err());
+}
+
+#[test]
+fn interactive_startup_and_explicit_tasks_leave_stdin_for_the_native_runtime() {
+    let bytes = b"piped context";
+    for (prompt, exec_mode) in [(None, false), (Some("Inspect".to_string()), true)] {
+        let mut input = &bytes[..];
+        assert_eq!(
+            read_task(None, prompt.clone(), exec_mode, &mut input, false).expect("optional input"),
+            prompt
+        );
+        assert_eq!(input, bytes);
+    }
+}
+
+#[test]
+fn task_sources_are_mutually_exclusive() {
+    for args in [
+        vec!["team", "--prompt-file", "task.txt", "positional task"],
+        vec!["team", "--prompt-file", "task.txt", "--prompt", "task"],
+    ] {
+        assert!(TeamCli::try_parse_from(args).is_err());
+    }
+    let command =
+        TeamCli::try_parse_from(["team", "--prompt-file", "task.txt"]).expect("task file option");
+    let root = TuiCli::try_parse_from(["codex", "root task"]).expect("root task option");
+    assert!(command.prepare(root).is_err());
+}

@@ -91,13 +91,34 @@ codex team --exec \
   --sandbox workspace-write --json
 ```
 
+Read a task from a UTF-8 file or pipe it into the team:
+
+```sh
+codex team --prompt-file task.md
+cat task.md | codex team --exec --json
+cat task.md | codex team --prompt-file -
+```
+
+`--prompt-file FILE` works in interactive and exec modes. Relative task-file
+paths use the directory where you launch the command, independently of `--cwd`.
+Use only one task source: `--prompt`, `--prompt-file`, or a positional task.
+`--prompt -` and the positional task `-` also read stdin. Exec mode reads stdin
+when no task source is given; missing terminal input, blank tasks, unreadable
+files, and invalid UTF-8 fail before role files are published. Interactive mode
+without a task source continues to wait for a task in the TUI. With an explicit
+task and piped input, the native exec runtime still appends that input as
+additional context. Dry runs read the selected task source and include its text
+in the JSON preview without publishing role files or making model requests.
+
 Native `codex team` accepts normal interactive Codex flags directly, including
 `--sandbox`/`-s`, `--profile`/`-p`, `--image`/`-i`, `--add-dir`, `--worktree`,
 `--ask-for-approval`/`-a`, and `--strict-config`. Both `--sandbox=read-only` and
 `--sandbox read-only` work. Use `--cd`/`-C` or its `--cwd` alias to choose the
 project. A positional task is also accepted: `codex team "your task"`.
 `--model`/`-m` selects the architect and conflicts with an explicit
-`--architect-model`. Role settings take precedence over generic `-c` routing
+`--architect-model` at the same command level. A root `--model` before `team`
+is inherited unless `--model` or `--architect-model` after `team` overrides it.
+Role settings take precedence over generic `-c` routing
 overrides. Root-level runtime flags work before `team` too; flags after `team`
 take precedence. Profiles, authentication, provider settings, sandbox and
 approval controls follow the existing native runtime.
@@ -112,7 +133,9 @@ generated role paths refer to the local filesystem. Native `resume`, `fork`,
 they are not nested under `team`.
 
 For the original Python launcher, arguments following `--` are forwarded as
-individual process arguments. Supported
+individual process arguments. It supports the same `--prompt-file`, `--prompt -`,
+and implicit exec stdin task sources; it uses `--prompt` for literal task text.
+Supported
 shared flags are `--sandbox`, `--profile`, `--add-dir`, `--image`,
 `--local-provider`, `--oss`, `--approve-for-me`,
 `--dangerously-bypass-approvals-and-sandbox`, `--strict-config`, and `--help`.
@@ -155,6 +178,8 @@ Keep these files for sessions that reference them. Both interfaces leave
 `CODEX_HOME` and existing config files untouched. The native subcommand calls
 the normal interactive or exec runtime in process. The Python launcher uses an
 argument array without a shell and returns native subprocess exit codes.
+On POSIX, a child terminated by a signal returns the conventional
+`128 + signal` status, such as 143 for SIGTERM.
 
 Offline verification:
 
@@ -175,13 +200,23 @@ cargo test --locked -p codex-cli --test team_cli
 
 The native tests cover normal Codex flag parsing and precedence, help and shell
 completion discovery, interactive and exec configuration, atomic publication,
-concurrent launches, invalid inputs, and remote rejection. Process tests use
+concurrent launches, task files, stdin tasks, invalid inputs, and remote rejection.
+Model precedence tests cover flags before and after `team`. Process tests use
 `--dry-run` and make no model requests. A separate process smoke check is also
 available (Python 3.11+):
 
 ```sh
 python3 scripts/harness_team_smoke.py --codex ./codex-rs/target/debug/codex
 ```
+
+Local validation of the task-input and model-precedence changes ran 43 Python
+tests with one platform skip, plus 21 Rust tests, Clippy, and 10 preview process
+checks through a temporary subset harness importing the production CLI code.
+That harness uses a reduced root parser and stubbed protocol types. Its existing
+completion test was excluded because the cached dependency differs from the
+repository-pinned version. Full native tests and runtime execution remain
+unverified for these changes: the offline build lacks a V8 Git submodule, and
+dependency downloads are unavailable.
 
 A live check on 2026-11-11 used installed `codex-cli 0.165.0` with the question
 above in the interactive TUI, a temporary project, and the native read-only

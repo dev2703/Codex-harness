@@ -113,6 +113,24 @@ def _role_file(role: RoleConfig) -> str:
     )
 
 
+def _resolve_prompt(
+    prompt: str | None, prompt_file: Path | None, *, exec_mode: bool
+) -> str | None:
+    """Resolve task input before publishing role files or starting Codex."""
+    from_stdin = prompt == "-" or prompt_file == Path("-")
+    if prompt_file is not None and not from_stdin:
+        prompt = prompt_file.expanduser().read_bytes().decode("utf-8")
+    elif from_stdin or (exec_mode and prompt is None):
+        if sys.stdin.isatty():
+            raise ValueError(
+                "task input requires piped stdin; use --prompt TEXT or --prompt-file FILE"
+            )
+        prompt = sys.stdin.buffer.read().decode("utf-8")
+    if prompt is not None and not prompt.strip():
+        raise ValueError("task prompt must not be empty or whitespace-only")
+    return prompt
+
+
 def _nonblank(value: str, label: str, *, model: bool = False) -> str:
     if not value.strip():
         raise ValueError(f"{label} must not be blank")
@@ -333,7 +351,14 @@ def _parser() -> argparse.ArgumentParser:
     ):
         parser.add_argument(f"--{name}-model", default=default_model)
         parser.add_argument(f"--{name}-effort", choices=EFFORTS, default=default_effort)
-    parser.add_argument("--prompt", help="task for the lead architect")
+    task = parser.add_mutually_exclusive_group()
+    task.add_argument("--prompt", help="task for the lead architect; '-' reads stdin")
+    task.add_argument(
+        "--prompt-file",
+        type=Path,
+        metavar="FILE",
+        help="read the task from a UTF-8 file; '-' reads stdin",
+    )
     parser.add_argument(
         "--exec",
         dest="exec_mode",
@@ -356,22 +381,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     parsed = parser.parse_args(args)
     cwd = parsed.cwd.expanduser().resolve()
-    config = TeamConfig(
-        codex=parsed.codex,
-        cwd=cwd,
-        state_dir=parsed.state_dir or cwd / ".codex-harness" / "teams",
-        architect_model=parsed.architect_model,
-        architect_effort=parsed.architect_effort,
-        engineer_model=parsed.engineer_model,
-        engineer_effort=parsed.engineer_effort,
-        gatekeeper_model=parsed.gatekeeper_model,
-        gatekeeper_effort=parsed.gatekeeper_effort,
-        skeptic_model=parsed.skeptic_model,
-        skeptic_effort=parsed.skeptic_effort,
-        prompt=parsed.prompt,
-        passthrough=forwarded,
-    )
     try:
+        prompt = _resolve_prompt(
+            parsed.prompt, parsed.prompt_file, exec_mode=parsed.exec_mode
+        )
+        config = TeamConfig(
+            codex=parsed.codex,
+            cwd=cwd,
+            state_dir=parsed.state_dir or cwd / ".codex-harness" / "teams",
+            architect_model=parsed.architect_model,
+            architect_effort=parsed.architect_effort,
+            engineer_model=parsed.engineer_model,
+            engineer_effort=parsed.engineer_effort,
+            gatekeeper_model=parsed.gatekeeper_model,
+            gatekeeper_effort=parsed.gatekeeper_effort,
+            skeptic_model=parsed.skeptic_model,
+            skeptic_effort=parsed.skeptic_effort,
+            prompt=prompt,
+            passthrough=forwarded,
+        )
         plan = build_plan(config, exec_mode=parsed.exec_mode)
         if parsed.dry_run:
             print(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True))
@@ -386,7 +414,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
             flush=True,
         )
-        return subprocess.run(plan["argv"], check=False).returncode
+        returncode = subprocess.run(plan["argv"], check=False).returncode
+        return 128 - returncode if returncode < 0 else returncode
     except (OSError, ValueError) as error:
         parser.error(str(error))
     return 2

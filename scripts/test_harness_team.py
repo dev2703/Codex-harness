@@ -32,7 +32,10 @@ class TeamLauncherTests(unittest.TestCase):
         self.workspace.mkdir()
         self.state = self.root / "state"
 
-    def run_launcher(self, *args, expected=0):
+    def run_launcher(
+        self, *args, expected=0, input_text=None, stdin_stream=None, launch_cwd=None
+    ):
+        process_stdin = stdin_stream if stdin_stream is not None else subprocess.DEVNULL
         result = subprocess.run(
             [
                 sys.executable,
@@ -46,6 +49,9 @@ class TeamLauncherTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=20,
+            input=input_text,
+            stdin=process_stdin if input_text is None else None,
+            cwd=launch_cwd,
         )
         self.assertEqual(result.returncode, expected, result.stderr)
         return result
@@ -187,7 +193,14 @@ class TeamLauncherTests(unittest.TestCase):
 
     def test_forwarded_native_flags_and_exec_mode(self):
         plan = self.preview(
-            "--exec", "--", "--sandbox", "read-only", "--json", "--skip-git-repo-check"
+            "--exec",
+            "--prompt",
+            "Inspect the repository",
+            "--",
+            "--sandbox",
+            "read-only",
+            "--json",
+            "--skip-git-repo-check",
         )
         self.assertEqual(plan["argv"][1], "exec")
         for flag in ("--sandbox", "--json", "--skip-git-repo-check"):
@@ -213,6 +226,136 @@ class TeamLauncherTests(unittest.TestCase):
 
     def test_child_exit_code_is_preserved(self):
         self.run_launcher("--codex", self.fake_codex(exit_code=7), expected=7)
+
+    @unittest.skipIf(os.name == "nt", "POSIX signal exit status")
+    def test_child_signal_uses_shell_exit_status(self):
+        executable = Path(self.fake_codex())
+        executable.write_text(
+            f"#!{sys.executable}\n"
+            "import os, signal\n"
+            "os.kill(os.getpid(), signal.SIGTERM)\n"
+        )
+        self.run_launcher("--codex", str(executable), expected=143)
+
+    def test_prompt_file_is_relative_to_launch_directory_and_preserves_content(self):
+        task = '  Inspect "quotes", $(touch never-created), café\r\n-c payload\n  '
+        prompt_file = self.root / "task with spaces.txt"
+        prompt_file.write_bytes(task.encode("utf-8"))
+        result = self.run_launcher(
+            "--dry-run", "--prompt-file", prompt_file.name, launch_cwd=self.root
+        )
+        plan = json.loads(result.stdout)
+        self.assertTrue(plan["prompt"].endswith("User task:\n" + task))
+        self.assertEqual(plan["argv"][-1], plan["prompt"])
+        self.assertFalse(self.state.exists())
+        self.assertFalse((self.root / "never-created").exists())
+        self.assertFalse((self.workspace / "never-created").exists())
+
+    def test_stdin_task_sources_preserve_literal_input(self):
+        task = '  Diagnose "quotes", $(touch never-created), café\r\n--prompt injected\n  '
+        for args in (
+            ("--prompt-file", "-"),
+            ("--prompt", "-"),
+            ("--exec",),
+            ("--exec", "--prompt-file", "-"),
+        ):
+            with self.subTest(args=args):
+                result = self.run_launcher("--dry-run", *args, input_text=task)
+                plan = json.loads(result.stdout)
+                self.assertTrue(plan["prompt"].endswith("User task:\n" + task))
+                self.assertEqual(plan["argv"][-1], plan["prompt"])
+                self.assertFalse(self.state.exists())
+                self.assertFalse((self.workspace / "never-created").exists())
+
+    def test_stdin_task_reaches_child_after_roles_are_published(self):
+        task = "Implement the parser\nPreserve all public methods.\n"
+        result = self.run_launcher(
+            "--codex", self.fake_codex(), "--exec", input_text=task
+        )
+        argv = json.loads(result.stdout)["argv"]
+        self.assertEqual(argv[0], "exec")
+        self.assertTrue(argv[-1].endswith("User task:\n" + task))
+        self.assertEqual(len(list(self.state.rglob("*.toml"))), 3)
+
+    def test_explicit_task_keeps_piped_input_for_native_runtime(self):
+        executable = Path(self.fake_codex())
+        executable.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "print(json.dumps({'argv': sys.argv[1:], 'stdin': sys.stdin.read()}))\n"
+        )
+        context = "Additional context\n$(touch never-created)\n"
+        result = self.run_launcher(
+            "--codex",
+            str(executable),
+            "--exec",
+            "--prompt",
+            "Inspect this",
+            input_text=context,
+        )
+        observed = json.loads(result.stdout)
+        self.assertEqual(observed["stdin"], context)
+        self.assertTrue(observed["argv"][-1].endswith("User task:\nInspect this"))
+
+    def test_invalid_task_sources_fail_before_publication_or_launch(self):
+        invalid_utf8 = self.root / "invalid.txt"
+        invalid_utf8.write_bytes(b"\xff")
+        empty = self.root / "empty.txt"
+        empty.write_text(" \t\n")
+        for args in (
+            ("--prompt-file", str(self.root / "missing.txt")),
+            ("--prompt-file", str(self.workspace)),
+            ("--prompt-file", str(invalid_utf8)),
+            ("--prompt-file", str(empty)),
+            ("--prompt", ""),
+            ("--prompt", " \t\n"),
+            ("--prompt", "task", "--prompt-file", str(empty)),
+            ("--prompt", "-"),
+            ("--prompt-file", "-"),
+            ("--exec",),
+        ):
+            with self.subTest(args=args):
+                result = self.run_launcher(
+                    "--codex", "missing-codex", *args, expected=2
+                )
+                self.assertEqual(result.stdout, "")
+                self.assertFalse(self.state.exists())
+                self.assertNotIn("Team roles configured:", result.stderr)
+
+    def test_required_stdin_rejects_whitespace_and_invalid_utf8(self):
+        for data in (b" \t\r\n", b"\xff"):
+            with self.subTest(data=data):
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(LAUNCHER),
+                        "--exec",
+                        "--cwd",
+                        str(self.workspace),
+                        "--state-dir",
+                        str(self.state),
+                    ],
+                    input=data,
+                    capture_output=True,
+                    timeout=20,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stdout, b"")
+                self.assertFalse(self.state.exists())
+                self.assertNotIn(b"Team roles configured:", result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "POSIX terminal fixture")
+    def test_required_terminal_stdin_fails_without_waiting(self):
+        master, slave = os.openpty()
+        try:
+            for args in (("--prompt", "-"), ("--prompt-file", "-"), ("--exec",)):
+                with self.subTest(args=args):
+                    result = self.run_launcher(*args, expected=2, stdin_stream=slave)
+                    self.assertIn("requires piped stdin", result.stderr)
+                    self.assertFalse(self.state.exists())
+        finally:
+            os.close(master)
+            os.close(slave)
 
     def test_changed_existing_role_file_is_not_overwritten(self):
         args = ["--codex", self.fake_codex()]

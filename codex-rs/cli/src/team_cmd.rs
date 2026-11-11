@@ -9,6 +9,8 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 use std::collections::BTreeMap;
+use std::io::IsTerminal;
+use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -31,13 +33,17 @@ pub(crate) struct TeamCli {
     #[command(flatten)]
     pub interactive: TuiCli,
 
-    /// Task for the lead architect (also accepted as a positional PROMPT).
+    /// Task for the lead architect (also positional); use - to read stdin.
     #[arg(long = "prompt", conflicts_with = "prompt", value_name = "TEXT")]
     pub task_prompt: Option<String>,
 
-    /// Model for the lead architect and final arbiter.
-    #[arg(long, default_value = "gpt-6.1-sol")]
-    pub architect_model: String,
+    /// Read a UTF-8 task file, or use - to read the task from stdin.
+    #[arg(long, conflicts_with_all = ["task_prompt", "prompt"], value_name = "FILE")]
+    pub prompt_file: Option<PathBuf>,
+
+    /// Model for the lead architect and final arbiter (defaults to --model or gpt-6.1-sol).
+    #[arg(long)]
+    pub architect_model: Option<String>,
     #[arg(long, default_value = "ultra", value_parser = EFFORTS)]
     pub architect_effort: String,
     #[arg(long, default_value = "gpt-6-sol")]
@@ -53,7 +59,7 @@ pub(crate) struct TeamCli {
     #[arg(long, default_value = "high", value_parser = EFFORTS)]
     pub skeptic_effort: String,
 
-    /// Run the team non-interactively using the native exec runtime.
+    /// Run non-interactively; read the task from stdin if no task is given.
     #[arg(long = "exec", conflicts_with_all = ["no_alt_screen", "no_daemon"])]
     pub exec_mode: bool,
     /// Print a JSON launch preview without creating files or making model requests.
@@ -117,11 +123,23 @@ impl TeamCli {
 
     /// Root configuration overrides must already be attached to `root`.
     /// Team routing overrides are appended last, preserving native permissions.
-    pub(crate) fn prepare(self, mut root: TuiCli) -> anyhow::Result<TeamLaunch> {
-        if self.task_prompt.is_some()
+    pub(crate) fn prepare(self, root: TuiCli) -> anyhow::Result<TeamLaunch> {
+        let stdin = std::io::stdin();
+        self.prepare_with_input(root, &mut stdin.lock(), stdin.is_terminal())
+    }
+
+    fn prepare_with_input(
+        self,
+        mut root: TuiCli,
+        input: &mut impl Read,
+        stdin_is_terminal: bool,
+    ) -> anyhow::Result<TeamLaunch> {
+        if (self.task_prompt.is_some() || self.prompt_file.is_some())
             && (self.interactive.prompt.is_some() || root.prompt.is_some())
         {
-            anyhow::bail!("provide the task as either --prompt or a positional PROMPT");
+            anyhow::bail!(
+                "provide the task using only one of --prompt, --prompt-file, or a positional PROMPT"
+            );
         }
         let root_images = root.shared.images.clone();
         let child_images = self.interactive.shared.images.clone();
@@ -130,7 +148,9 @@ impl TeamCli {
             .shared
             .model
             .clone()
-            .unwrap_or(self.architect_model);
+            .or(self.architect_model)
+            .or_else(|| root.shared.model.clone())
+            .unwrap_or_else(|| "gpt-6.1-sol".to_string());
         for (name, model) in [
             ("architect", &architect_model),
             ("engineer", &self.engineer_model),
@@ -166,6 +186,13 @@ impl TeamCli {
                 cwd.display()
             );
         }
+        let task = read_task(
+            self.prompt_file.as_deref(),
+            root.prompt.take(),
+            self.exec_mode,
+            input,
+            stdin_is_terminal,
+        )?;
         let state_dir = self
             .state_dir
             .as_deref()
@@ -233,7 +260,7 @@ impl TeamCli {
         }
         root.shared.cwd = Some(cwd);
         root.shared.model = Some(architect_model.clone());
-        let prompt = match root.prompt.take() {
+        let prompt = match task {
             Some(task) => format!("{ROOT_BRIEFING}\n\nUser task:\n{task}"),
             None => format!(
                 "{ROOT_BRIEFING}\n\nNo task supplied yet. Acknowledge the team configuration and wait for the user's task."
@@ -337,6 +364,44 @@ impl TeamCli {
             },
         })
     }
+}
+
+fn read_task(
+    prompt_file: Option<&Path>,
+    prompt: Option<String>,
+    exec_mode: bool,
+    input: &mut impl Read,
+    stdin_is_terminal: bool,
+) -> anyhow::Result<Option<String>> {
+    let task =
+        match prompt_file {
+            Some(path) if path != Path::new("-") => {
+                let path = expand_home(path)?;
+                Some(std::fs::read_to_string(&path).with_context(|| {
+                    format!("could not read UTF-8 task file: {}", path.display())
+                })?)
+            }
+            _ if prompt_file.is_some()
+                || prompt.as_deref() == Some("-")
+                || (exec_mode && prompt.is_none()) =>
+            {
+                if stdin_is_terminal {
+                    anyhow::bail!(
+                        "provide a task with --prompt, --prompt-file, or pipe a task into stdin"
+                    );
+                }
+                let mut task = String::new();
+                input
+                    .read_to_string(&mut task)
+                    .context("could not read a UTF-8 task from stdin")?;
+                Some(task)
+            }
+            _ => prompt,
+        };
+    if task.as_ref().is_some_and(|task| task.trim().is_empty()) {
+        anyhow::bail!("team task must not be blank");
+    }
+    Ok(task)
 }
 
 fn validate_model(model: &str, name: &str) -> anyhow::Result<()> {

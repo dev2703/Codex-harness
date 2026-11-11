@@ -54,6 +54,7 @@ fn team_is_discoverable_in_help_and_shell_completions() {
         "--gatekeeper-model",
         "--skeptic-model",
         "--prompt",
+        "--prompt-file",
         "--exec",
         "--dry-run",
         "--sandbox",
@@ -100,6 +101,63 @@ fn requested_architect_settings_and_literal_task_reach_the_tui() {
     assert_eq!(
         effective_override(&interactive.config_overrides, "model_reasoning_effort"),
         Some(toml::Value::String("ultra".into())),
+    );
+}
+
+#[test]
+fn architect_model_obeys_root_and_subcommand_precedence() {
+    for mode in [vec![], vec!["--exec"]] {
+        for (root_model, child_args, expected) in [
+            (None, vec![], "gpt-6.1-sol"),
+            (Some("root-model"), vec![], "root-model"),
+            (
+                Some("root-model"),
+                vec!["--architect-model", "child-model"],
+                "child-model",
+            ),
+            (
+                Some("root-model"),
+                vec!["--architect-model", "gpt-6.1-sol"],
+                "gpt-6.1-sol",
+            ),
+            (
+                Some("root-model"),
+                vec!["--model", "child-alias"],
+                "child-alias",
+            ),
+        ] {
+            let mut args = vec!["codex"];
+            if let Some(model) = root_model {
+                args.extend(["--model", model]);
+            }
+            args.extend(["team", "--dry-run", "--prompt", "Inspect the parser"]);
+            args.extend(mode.iter().copied());
+            args.extend(child_args);
+            let launch = prepare_from_args(&args);
+            let model = match launch.session {
+                TeamSession::Interactive(interactive) => interactive.shared.model.clone(),
+                TeamSession::Exec(exec) => exec.shared.model.clone(),
+            };
+            assert_eq!(model.as_deref(), Some(expected), "arguments: {args:?}");
+            let model_arg = launch
+                .plan
+                .argv
+                .windows(2)
+                .find(|pair| pair[0] == "-m")
+                .expect("preview includes architect model");
+            assert_eq!(model_arg[1], expected);
+        }
+    }
+    assert!(
+        try_parse_from([
+            "codex",
+            "team",
+            "--model",
+            "alias-model",
+            "--architect-model",
+            "role-model",
+        ])
+        .is_err()
     );
 }
 
@@ -256,6 +314,8 @@ fn root_runtime_policies_allow_team_sessions() {
             "--worktree",
             "team",
             "--dry-run",
+            "--prompt",
+            "Inspect runtime policy inheritance",
         ];
         args.extend(mode);
         let cli = try_parse_from(args.iter().copied()).expect("parse runtime options");
