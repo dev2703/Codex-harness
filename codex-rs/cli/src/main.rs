@@ -65,6 +65,7 @@ mod exec_args_tests;
 #[cfg(test)]
 #[path = "exec_server_args_tests.rs"]
 mod exec_server_args_tests;
+mod handoff_cmd;
 mod marketplace_cmd;
 mod mcp_cmd;
 mod mcp_login;
@@ -77,6 +78,10 @@ mod remote_control_cmd;
 mod sandbox_setup;
 mod sandbox_uninstall;
 mod state_db_recovery;
+#[cfg(test)]
+#[path = "team_args_tests.rs"]
+mod team_args_tests;
+mod team_cmd;
 #[cfg(not(windows))]
 mod wsl_paths;
 
@@ -152,6 +157,12 @@ enum Subcommand {
     /// Run Codex non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
+
+    /// Start a configurable architect, engineer, gatekeeper, and skeptic team.
+    Team(team_cmd::TeamCli),
+
+    /// Save, inspect or continue an explicit durable context handoff.
+    Handoff(handoff_cmd::HandoffCli),
 
     /// Run a code review non-interactively.
     Review(ReviewCommand),
@@ -1153,6 +1164,30 @@ async fn dispatch_cli(
         Some(Subcommand::TcpTunnel(args)) => {
             codex_tcp_tunnel::run(args).await?;
         }
+        Some(Subcommand::Team(command)) => {
+            // Role files are local paths and cannot be applied to a remote server.
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "team",
+            )?;
+            prepend_config_flags(&mut interactive.config_overrides, root_config_overrides);
+            let launch = command.prepare(interactive)?;
+            if launch.dry_run {
+                launch.plan.print_preview()?;
+                return Ok(None);
+            }
+            launch.plan.publish()?;
+            launch.plan.print_status();
+            match launch.session {
+                team_cmd::TeamSession::Interactive(interactive) => {
+                    return Ok(Some(launch_tui(interactive, None, None, arg0_paths)));
+                }
+                team_cmd::TeamSession::Exec(exec_cli) => {
+                    Box::pin(codex_exec::run_main(exec_cli, arg0_paths.clone())).await?;
+                }
+            }
+        }
         Some(Subcommand::Exec(mut exec_cli)) => {
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
@@ -1169,6 +1204,21 @@ async fn dispatch_cli(
             );
             // Keep the exec future out of the shared dispatcher's stack frame.
             Box::pin(codex_exec::run_main(exec_cli, arg0_paths.clone())).await?;
+        }
+        Some(Subcommand::Handoff(command)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "handoff",
+            )?;
+            if let Some(mut exec_cli) = handoff_cmd::prepare(command, &interactive.shared)? {
+                exec_cli.strict_config |= root_strict_config;
+                prepend_config_flags(
+                    &mut exec_cli.config_overrides,
+                    root_config_overrides.clone(),
+                );
+                Box::pin(codex_exec::run_main(exec_cli, arg0_paths.clone())).await?;
+            }
         }
         Some(Subcommand::Review(ReviewCommand {
             strict_config,
@@ -1970,7 +2020,9 @@ fn profile_v2_for_subcommand<'a>(
     };
 
     match subcommand {
+        Subcommand::Handoff(command) if command.is_continue() => Ok(Some(profile_v2)),
         Subcommand::Agents(_)
+        | Subcommand::Team(_)
         | Subcommand::Exec(_)
         | Subcommand::Review(_)
         | Subcommand::Resume(_)
@@ -2289,7 +2341,9 @@ fn reject_unsupported_worktree_for_subcommand(
     subcommand: &Option<Subcommand>,
 ) -> anyhow::Result<()> {
     let subcommand_worktree = match subcommand {
+        Some(Subcommand::Team(command)) => command.worktree_requested(),
         Some(Subcommand::Exec(command)) => command.shared.worktree,
+        Some(Subcommand::Handoff(command)) => command.worktree_requested(),
         Some(Subcommand::Resume(command)) => command.config_overrides.0.shared.worktree,
         Some(Subcommand::Fork(command)) => command.config_overrides.0.shared.worktree,
         Some(Subcommand::Archive(command)) | Some(Subcommand::Unarchive(command)) => {
@@ -2305,7 +2359,8 @@ fn reject_unsupported_worktree_for_subcommand(
     }
 
     match subcommand {
-        None => Ok(()),
+        None | Some(Subcommand::Team(_)) => Ok(()),
+        Some(Subcommand::Handoff(command)) if command.is_continue() => Ok(()),
         Some(Subcommand::Fork(command)) if command.session_id.is_some() && !command.last => Ok(()),
         Some(Subcommand::Fork(_)) => {
             anyhow::bail!("`codex fork --worktree` requires an explicit session ID")
@@ -2361,6 +2416,7 @@ fn unsupported_subcommand_name_for_strict_config(
     match subcommand {
         None
         | Some(Subcommand::Agents(_))
+        | Some(Subcommand::Team(_))
         | Some(Subcommand::Exec(_))
         | Some(Subcommand::Review(_))
         | Some(Subcommand::ExecServer(_))
@@ -2376,6 +2432,8 @@ fn unsupported_subcommand_name_for_strict_config(
             Some(app_server_subcommand_name(app_server.subcommand.as_ref()))
         }
         Some(Subcommand::RemoteControl(remote_control)) => Some(remote_control.subcommand_name()),
+        Some(Subcommand::Handoff(command)) if command.is_continue() => None,
+        Some(Subcommand::Handoff(_)) => Some("handoff"),
         Some(Subcommand::Mcp(_)) => Some("mcp"),
         Some(Subcommand::Plugin(_)) => Some("plugin"),
         Some(Subcommand::MigrateRollouts(_)) => Some("migrate-rollouts"),

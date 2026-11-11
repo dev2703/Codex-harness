@@ -1366,6 +1366,9 @@
             "step_model_switching": {
               "type": "boolean"
             },
+            "strict_role_model_validation": {
+              "type": "boolean"
+            },
             "subagent_default_context_limits": {
               "type": "boolean"
             },
@@ -8425,6 +8428,9 @@
         "step_model_switching": {
           "type": "boolean"
         },
+        "strict_role_model_validation": {
+          "type": "boolean"
+        },
         "subagent_default_context_limits": {
           "type": "boolean"
         },
@@ -8601,6 +8607,10 @@
         }
       ],
       "description": "Goal-related settings."
+    },
+    "harness_replan_after_repeated_failure": {
+      "description": "Ask the existing primary model to assess repeated failures once per turn. Disabled by default.",
+      "type": "boolean"
     },
     "hide_agent_reasoning": {
       "default": false,

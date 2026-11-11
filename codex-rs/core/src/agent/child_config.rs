@@ -11,6 +11,7 @@ use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
 use codex_features::Feature;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::models::BaseInstructions;
@@ -81,7 +82,13 @@ pub(crate) async fn prepare_agent_spawn_config(
     if !options.full_history_fork
         || (options.version == SpawnConfigVersion::V2 && options.role_name.is_some())
     {
-        apply_spawn_agent_role(session, &mut config, options.role_name).await?;
+        apply_spawn_agent_role(
+            session,
+            &mut config,
+            options.role_name,
+            turn.multi_agent_version,
+        )
+        .await?;
         if options.version == SpawnConfigVersion::V2
             && options.full_history_fork
             && config.developer_instructions.is_none()
@@ -312,10 +319,29 @@ async fn apply_spawn_agent_role(
     session: &Session,
     config: &mut Config,
     role_name: Option<&str>,
+    multi_agent_version: MultiAgentVersion,
 ) -> Result<(), String> {
     let previous_model = config.model.clone();
     let previous_reasoning_effort = config.model_reasoning_effort.clone();
     apply_role_to_config(config, role_name).await?;
+    if should_validate_role_model_override(
+        config.features.enabled(Feature::StrictRoleModelValidation),
+        &config.model_provider_id,
+        previous_model.as_deref(),
+        config.model.as_deref(),
+    ) {
+        let model = config.model.as_deref().ok_or_else(|| {
+            "spawn_agent could not resolve the child model for catalog validation".to_string()
+        })?;
+        let available_models = session
+            .services
+            .models_manager
+            .list_models(RefreshStrategy::Offline, config.http_client_factory())
+            .await;
+        // Use the explicit spawn-override path's catalog and backend checks.
+        // Validate before the optional reasoning-effort early return below.
+        find_spawn_agent_model_name(&available_models, model, multi_agent_version)?;
+    }
     if config.model == previous_model && config.model_reasoning_effort == previous_reasoning_effort
     {
         return Ok(());
@@ -341,6 +367,18 @@ async fn apply_spawn_agent_role(
         &model_info.supported_reasoning_levels,
         &reasoning_effort,
     )
+}
+
+fn should_validate_role_model_override(
+    strict: bool,
+    provider_id: &str,
+    previous_model: Option<&str>,
+    selected_model: Option<&str>,
+) -> bool {
+    strict
+        && provider_id == OPENAI_PROVIDER_ID
+        && selected_model.is_some()
+        && selected_model != previous_model
 }
 
 fn find_spawn_agent_model_name(
@@ -391,3 +429,7 @@ fn validate_spawn_agent_reasoning_effort(
         "Reasoning effort `{requested_reasoning_effort}` is not supported for model `{model}`. Supported reasoning efforts: {supported}"
     ))
 }
+
+#[cfg(test)]
+#[path = "child_config_tests.rs"]
+mod tests;

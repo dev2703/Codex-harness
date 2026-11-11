@@ -634,6 +634,23 @@ pub(crate) async fn run_turn(
                 .map_err(CodexErr::Fatal)?;
             }
 
+            if let Some(notice) =
+                crate::tools::failure_observation::take_replan_notice(&turn_context)
+            {
+                let response_item = ContextualUserFragment::into(
+                    crate::context::AdditionalContextUserFragment::new(
+                        "harness_failure_replan".to_string(),
+                        notice,
+                    ),
+                );
+                sess.record_conversation_items(
+                    &turn_context,
+                    &step_context.settings.model_info,
+                    std::slice::from_ref(&response_item),
+                )
+                .await;
+            }
+
             // Keep the override after accepted input so history truncation removes them together.
             sess.record_reasoning_effort_override(step_context.as_ref())
                 .await;

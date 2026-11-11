@@ -1,6 +1,7 @@
 pub mod cloud_config;
 pub(crate) mod debug_sandbox;
 mod exit_status;
+pub mod handoff;
 pub(crate) mod login;
 
 use clap::Args;
