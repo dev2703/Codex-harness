@@ -114,18 +114,22 @@ def _role_file(role: RoleConfig) -> str:
 
 
 def _resolve_prompt(
-    prompt: str | None, prompt_file: Path | None, *, exec_mode: bool
+    prompt: str | None, prompt_file: str | None, *, exec_mode: bool
 ) -> str | None:
     """Resolve task input before publishing role files or starting Codex."""
-    from_stdin = prompt == "-" or prompt_file == Path("-")
+    # Keep raw spelling: Path normalizes "./-", "-/", and "-/." into "-".
+    from_stdin = prompt == "-" or prompt_file == "-"
     if prompt_file is not None and not from_stdin:
-        prompt = prompt_file.expanduser().read_bytes().decode("utf-8")
+        with open(os.path.expanduser(prompt_file), "rb") as stream:
+            prompt = stream.read().decode("utf-8")
     elif from_stdin or (exec_mode and prompt is None):
         if sys.stdin.isatty():
             raise ValueError(
                 "task input requires piped stdin; use --prompt TEXT or --prompt-file FILE"
             )
         prompt = sys.stdin.buffer.read().decode("utf-8")
+    if prompt is not None and "\x00" in prompt:
+        raise ValueError("task prompt must not contain NUL bytes")
     if prompt is not None and not prompt.strip():
         raise ValueError("task prompt must not be empty or whitespace-only")
     return prompt
@@ -355,7 +359,6 @@ def _parser() -> argparse.ArgumentParser:
     task.add_argument("--prompt", help="task for the lead architect; '-' reads stdin")
     task.add_argument(
         "--prompt-file",
-        type=Path,
         metavar="FILE",
         help="read the task from a UTF-8 file; '-' reads stdin",
     )

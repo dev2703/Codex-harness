@@ -71,6 +71,33 @@ class TeamLauncherTests(unittest.TestCase):
         executable.chmod(0o700)
         return str(executable)
 
+    def role_checking_codex(self):
+        if tomllib is None:
+            raise unittest.SkipTest("Child role validation requires Python 3.11+")
+        executable = Path(self.fake_codex())
+        executable.write_text(
+            f"#!{sys.executable}\n"
+            "import json, pathlib, sys, tomllib\n"
+            "argv = sys.argv[1:]\n"
+            "overrides = {}\n"
+            "for index, arg in enumerate(argv[:-1]):\n"
+            "    if arg == '-c':\n"
+            "        key, value = argv[index + 1].split('=', 1)\n"
+            "        overrides[key] = tomllib.loads('value=' + value)['value']\n"
+            "roles = {}\n"
+            "for role in ('engineer', 'gatekeeper', 'skeptic'):\n"
+            "    path = pathlib.Path(overrides[f'agents.{role}.config_file'])\n"
+            "    assert path.is_absolute()\n"
+            "    config = tomllib.loads(path.read_text(encoding='utf-8'))\n"
+            "    assert config['name'] == role\n"
+            "    assert config['description'] and config['developer_instructions']\n"
+            "    assert not {'sandbox_mode', 'approval_policy'}.intersection(config)\n"
+            "    roles[role] = config\n"
+            "print(json.dumps({'argv': argv, 'roles': roles, 'overrides': overrides, "
+            "'stdin': sys.stdin.read()}))\n"
+        )
+        return str(executable)
+
     @staticmethod
     def config_overrides(argv):
         if tomllib is None:
@@ -252,7 +279,9 @@ class TeamLauncherTests(unittest.TestCase):
         self.assertFalse((self.workspace / "never-created").exists())
 
     def test_stdin_task_sources_preserve_literal_input(self):
-        task = '  Diagnose "quotes", $(touch never-created), café\r\n--prompt injected\n  '
+        task = (
+            '  Diagnose "quotes", $(touch never-created), café\r\n--prompt injected\n  '
+        )
         for args in (
             ("--prompt-file", "-"),
             ("--prompt", "-"),
@@ -297,15 +326,116 @@ class TeamLauncherTests(unittest.TestCase):
         self.assertEqual(observed["stdin"], context)
         self.assertTrue(observed["argv"][-1].endswith("User task:\nInspect this"))
 
+    def test_file_task_content_and_piped_context_reach_configured_child(self):
+        executable = self.role_checking_codex()
+        prompt_file = self.root / "task.txt"
+        context = "Keep this piped context\n$(touch never-created)\n"
+        for task in ("-", '\ufeffPreserve "quotes"\r\n$(touch never-created)\n'):
+            with self.subTest(task=task):
+                prompt_file.write_bytes(task.encode("utf-8"))
+                result = self.run_launcher(
+                    "--codex",
+                    executable,
+                    "--exec",
+                    "--prompt-file",
+                    str(prompt_file),
+                    "--engineer-model",
+                    "file-task-engineer",
+                    "--engineer-effort",
+                    "low",
+                    "--",
+                    "--sandbox",
+                    "read-only",
+                    "--json",
+                    input_text=context,
+                )
+                observed = json.loads(result.stdout)
+                self.assertEqual(observed["stdin"], context)
+                argv = observed["argv"]
+                self.assertTrue(argv[-1].endswith("User task:\n" + task))
+                self.assertEqual(argv[argv.index("--sandbox") + 1], "read-only")
+                self.assertIn("--json", argv)
+                self.assertTrue(observed["overrides"]["agents.enabled"])
+                engineer = observed["roles"]["engineer"]
+                self.assertEqual(engineer["model"], "file-task-engineer")
+                self.assertEqual(engineer["model_reasoning_effort"], "low")
+                self.assertEqual(len(observed["roles"]), 3)
+                self.assertFalse((self.workspace / "never-created").exists())
+
+    def test_dash_named_prompt_file_is_distinct_from_stdin_sentinel(self):
+        executable = self.role_checking_codex()
+        file_task = "Use the task from the dash-named file\n"
+        (self.root / "-").write_text(file_task)
+        context = "Use this distinct piped input\n"
+        for file_arg, expected_task, expected_stdin in (
+            ("./-", file_task, context),
+            ("-", context, ""),
+        ):
+            with self.subTest(file_arg=file_arg):
+                result = self.run_launcher(
+                    "--codex",
+                    executable,
+                    "--exec",
+                    "--prompt-file",
+                    file_arg,
+                    input_text=context,
+                    launch_cwd=self.root,
+                )
+                observed = json.loads(result.stdout)
+                self.assertTrue(
+                    observed["argv"][-1].endswith("User task:\n" + expected_task)
+                )
+                self.assertEqual(observed["stdin"], expected_stdin)
+
+    def test_blank_dash_named_prompt_file_fails_before_publication(self):
+        for data in (b"", b" \t\r\n"):
+            with self.subTest(data=data):
+                (self.root / "-").write_bytes(data)
+                result = self.run_launcher(
+                    "--codex",
+                    "missing-codex",
+                    "--exec",
+                    "--prompt-file",
+                    "./-",
+                    input_text="A nonempty piped context\n",
+                    launch_cwd=self.root,
+                    expected=2,
+                )
+                self.assertIn("empty or whitespace-only", result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("Team roles configured:", result.stderr)
+                self.assertFalse(self.state.exists())
+
+    def test_dash_file_with_directory_suffix_fails_before_publication(self):
+        (self.root / "-").write_text("A task in a regular file\n")
+        for source in ("-/", "-/."):
+            with self.subTest(source=source):
+                result = self.run_launcher(
+                    "--codex",
+                    "missing-codex",
+                    "--exec",
+                    "--prompt-file=" + source,
+                    input_text="A distinct piped task\n",
+                    launch_cwd=self.root,
+                    expected=2,
+                )
+                self.assertIn(source, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("Team roles configured:", result.stderr)
+                self.assertFalse(self.state.exists())
+
     def test_invalid_task_sources_fail_before_publication_or_launch(self):
         invalid_utf8 = self.root / "invalid.txt"
         invalid_utf8.write_bytes(b"\xff")
+        invalid_nul = self.root / "nul.txt"
+        invalid_nul.write_bytes(b"Inspect\x00the parser")
         empty = self.root / "empty.txt"
         empty.write_text(" \t\n")
         for args in (
             ("--prompt-file", str(self.root / "missing.txt")),
             ("--prompt-file", str(self.workspace)),
             ("--prompt-file", str(invalid_utf8)),
+            ("--prompt-file", str(invalid_nul)),
             ("--prompt-file", str(empty)),
             ("--prompt", ""),
             ("--prompt", " \t\n"),
@@ -322,8 +452,8 @@ class TeamLauncherTests(unittest.TestCase):
                 self.assertFalse(self.state.exists())
                 self.assertNotIn("Team roles configured:", result.stderr)
 
-    def test_required_stdin_rejects_whitespace_and_invalid_utf8(self):
-        for data in (b" \t\r\n", b"\xff"):
+    def test_required_stdin_rejects_unusable_task_bytes(self):
+        for data in (b" \t\r\n", b"\xff", b"Inspect\x00the parser"):
             with self.subTest(data=data):
                 result = subprocess.run(
                     [
@@ -385,6 +515,33 @@ class TeamLauncherTests(unittest.TestCase):
             )
         self.assertEqual(len(results), 12)
         self.assertEqual(len(list(self.state.rglob("*.toml"))), 3)
+
+    def test_concurrent_stdin_launches_read_complete_roles(self):
+        executable = self.role_checking_codex()
+        tasks = [
+            f"Handle task {index}\nPreserve literal $(touch never-created)\n"
+            for index in range(12)
+        ]
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            results = list(
+                executor.map(
+                    lambda task: self.run_launcher(
+                        "--codex", executable, "--exec", input_text=task
+                    ),
+                    tasks,
+                )
+            )
+        self.assertEqual(len(results), 12)
+        self.assertEqual(len(list(self.state.rglob("*.toml"))), 3)
+        for task, result in zip(tasks, results):
+            observed = json.loads(result.stdout)
+            self.assertTrue(observed["argv"][-1].endswith("User task:\n" + task))
+            self.assertEqual(observed["stdin"], "")
+            for role, (model, effort) in DEFAULTS.items():
+                config = observed["roles"][role]
+                self.assertEqual(config["model"], model)
+                self.assertEqual(config["model_reasoning_effort"], effort)
+        self.assertFalse((self.workspace / "never-created").exists())
 
 
 if __name__ == "__main__":

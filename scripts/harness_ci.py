@@ -62,6 +62,18 @@ def checks(report_dir: Path) -> None:
 
 def native() -> None:
     run(["cargo", "build", "--locked", "-p", "codex-cli", "--bin", "codex"], cwd=RUST)
+    run(
+        [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "codex-code-mode-host",
+            "--bin",
+            "codex-code-mode-host",
+        ],
+        cwd=RUST,
+    )
     for package, target, test_filter in (
         ("codex-cli", "--lib", "handoff"),
         ("codex-cli", "--bin", "handoff_cmd"),
@@ -75,7 +87,9 @@ def native() -> None:
         if target == "--bin":
             command.append("codex")
         run([*command, test_filter], cwd=RUST)
-    run(["cargo", "test", "--locked", "-p", "codex-cli", "--test", "team_cli"], cwd=RUST)
+    run(
+        ["cargo", "test", "--locked", "-p", "codex-cli", "--test", "team_cli"], cwd=RUST
+    )
     target_dir = Path(os.environ.get("CARGO_TARGET_DIR", RUST / "target"))
     if not target_dir.is_absolute():
         target_dir = RUST / target_dir

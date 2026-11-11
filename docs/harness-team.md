@@ -10,12 +10,13 @@ codex team \
 ```
 
 The `team` subcommand is implemented in this repository's native CLI. Build it
-before using the new command; an existing installed release does not acquire
-the command from changes to this checkout:
+and its companion runtime before using the new command; an existing installed
+release does not acquire the command from changes to this checkout:
 
 ```sh
 cd codex-rs
 cargo build --locked -p codex-cli --bin codex
+cargo build --locked -p codex-code-mode-host --bin codex-code-mode-host
 ./target/debug/codex team --help
 ./target/debug/codex team --prompt "your task"
 ```
@@ -104,7 +105,9 @@ paths use the directory where you launch the command, independently of `--cwd`.
 Use only one task source: `--prompt`, `--prompt-file`, or a positional task.
 `--prompt -` and the positional task `-` also read stdin. Exec mode reads stdin
 when no task source is given; missing terminal input, blank tasks, unreadable
-files, and invalid UTF-8 fail before role files are published. Interactive mode
+files, invalid UTF-8, and NUL characters fail before role files are published.
+Only the exact `--prompt-file -` spelling selects stdin; use `--prompt-file ./-`
+to read a file named `-`. Interactive mode
 without a task source continues to wait for a task in the TUI. With an explicit
 task and piped input, the native exec runtime still appends that input as
 additional context. Dry runs read the selected task source and include its text
@@ -209,14 +212,20 @@ available (Python 3.11+):
 python3 scripts/harness_team_smoke.py --codex ./codex-rs/target/debug/codex
 ```
 
-Local validation of the task-input and model-precedence changes ran 43 Python
-tests with one platform skip, plus 21 Rust tests, Clippy, and 10 preview process
-checks through a temporary subset harness importing the production CLI code.
-That harness uses a reduced root parser and stubbed protocol types. Its existing
-completion test was excluded because the cached dependency differs from the
-repository-pinned version. Full native tests and runtime execution remain
-unverified for these changes: the offline build lacks a V8 Git submodule, and
-dependency downloads are unavailable.
+Local validation on 2026-11-11 ran 48 Python tests with one Linux-only skip,
+129 focused native Rust tests, six CLI smoke checks, and three real-command
+failure-policy replays. Native coverage includes team parsing and process tests,
+handoff, failure observation, output evidence, role validation, and feature flags.
+The CLI and its companion runtime both build from this checkout.
+Rust and Python lint/format checks pass, and regenerating the configuration
+schema produces exactly the committed bytes.
+
+Eight additional native exec runs against a local fixed Responses fixture verify
+task and piped-context delivery exactly once, model/effort routing, distinct
+sessions, and startup without error events. These cover stdin task forms, task
+files, literal text, and files named `-`. No live model requests or tool calls
+were made in those runs; live role behavior and native sandbox enforcement remain
+separate validation gates.
 
 A live check on 2026-11-11 used installed `codex-cli 0.165.0` with the question
 above in the interactive TUI, a temporary project, and the native read-only

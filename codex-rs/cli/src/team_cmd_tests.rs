@@ -286,7 +286,7 @@ fn missing_invalid_and_blank_task_sources_fail_before_publication() {
     let root = tempfile::tempdir().expect("temporary workspace");
     let path = root.path().join("task.txt");
     assert!(read_task(Some(&path), None, false, &mut &b""[..], false).is_err());
-    for bytes in [&b" \r\n\t"[..], &b"\xff"[..]] {
+    for bytes in [&b" \r\n\t"[..], &b"\xff"[..], &b"Inspect\0task"[..]] {
         std::fs::write(&path, bytes).expect("write invalid task");
         let command =
             TeamCli::try_parse_from(["team", "--prompt-file", path.to_str().expect("UTF-8 path")])
@@ -301,6 +301,16 @@ fn missing_invalid_and_blank_task_sources_fail_before_publication() {
         assert!(read_task(None, prompt, true, &mut &b"task"[..], true).is_err());
     }
     assert!(read_task(None, Some(" ".into()), false, &mut &b""[..], false).is_err());
+    assert!(
+        read_task(
+            None,
+            Some("Inspect\0task".into()),
+            false,
+            &mut &b""[..],
+            false
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -328,4 +338,15 @@ fn task_sources_are_mutually_exclusive() {
         TeamCli::try_parse_from(["team", "--prompt-file", "task.txt"]).expect("task file option");
     let root = TuiCli::try_parse_from(["codex", "root task"]).expect("root task option");
     assert!(command.prepare(root).is_err());
+}
+
+#[test]
+fn normalized_dash_task_paths_are_files_and_leave_stdin_unread() {
+    for source in ["-/", "-/."] {
+        let mut input = &b"Task from piped stdin"[..];
+        let error = read_task(Some(Path::new(source)), None, true, &mut input, false)
+            .expect_err("a trailing separator selects a file path");
+        assert!(error.to_string().contains("could not read UTF-8 task file"));
+        assert_eq!(input, b"Task from piped stdin");
+    }
 }

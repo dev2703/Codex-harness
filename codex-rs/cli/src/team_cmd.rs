@@ -375,7 +375,7 @@ fn read_task(
 ) -> anyhow::Result<Option<String>> {
     let task =
         match prompt_file {
-            Some(path) if path != Path::new("-") => {
+            Some(path) if path.as_os_str() != std::ffi::OsStr::new("-") => {
                 let path = expand_home(path)?;
                 Some(std::fs::read_to_string(&path).with_context(|| {
                     format!("could not read UTF-8 task file: {}", path.display())
@@ -400,6 +400,9 @@ fn read_task(
         };
     if task.as_ref().is_some_and(|task| task.trim().is_empty()) {
         anyhow::bail!("team task must not be blank");
+    }
+    if task.as_ref().is_some_and(|task| task.contains('\0')) {
+        anyhow::bail!("team task must not contain NUL characters");
     }
     Ok(task)
 }

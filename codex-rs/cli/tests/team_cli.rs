@@ -212,6 +212,7 @@ async fn unreadable_and_empty_tasks_fail_before_role_publication() -> Result<()>
     for (args, input) in [
         (vec!["team", "--exec"], &b" \n\t"[..]),
         (vec!["team", "--exec", "-"], &b"\xff"[..]),
+        (vec!["team", "--exec", "-"], &b"Inspect\0task"[..]),
         (vec!["team", "--prompt-file", "missing.txt"], &b""[..]),
         (vec!["team", "--prompt", " "], &b""[..]),
     ] {
@@ -261,6 +262,61 @@ async fn task_file_paths_use_launch_directory_when_session_cwd_differs() -> Resu
     );
     assert!(!fixture.project.join(".codex-harness").exists());
     assert!(!fixture.home.join(".codex-harness").exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn only_exact_dash_selects_stdin_instead_of_a_task_file() -> Result<()> {
+    let fixture = TeamFixture::new()?;
+    let file_task = "Read the task from the file named dash";
+    let stdin_task = "Read the task from piped stdin";
+    std::fs::write(fixture.project.join("-"), file_task)?;
+    for exec_mode in [false, true] {
+        for (source, expected) in [("./-", file_task), ("-", stdin_task)] {
+            let mut args = vec!["team", "--dry-run", "--prompt-file", source];
+            if exec_mode {
+                args.push("--exec");
+            }
+            let output = fixture.run_with_input(&args, stdin_task.as_bytes()).await?;
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let preview: Value = serde_json::from_slice(&output.stdout)?;
+            assert!(
+                preview["prompt"]
+                    .as_str()
+                    .expect("task prompt")
+                    .ends_with(expected)
+            );
+            assert!(!fixture.project.join(".codex-harness").exists());
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn normalized_dash_task_paths_fail_as_files_before_publication() -> Result<()> {
+    let fixture = TeamFixture::new()?;
+    std::fs::write(fixture.project.join("-"), "Task from the file named dash")?;
+    for exec_mode in [false, true] {
+        for source in ["--prompt-file=-/", "--prompt-file=-/."] {
+            let mut args = vec!["team", source];
+            if exec_mode {
+                args.push("--exec");
+            }
+            let output = fixture
+                .run_with_input(&args, b"Task from piped stdin")
+                .await?;
+            assert!(!output.status.success(), "unexpected success for {args:?}");
+            assert!(output.stdout.is_empty());
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("could not read UTF-8 task file")
+            );
+            assert!(!fixture.project.join(".codex-harness").exists());
+        }
+    }
     Ok(())
 }
 
